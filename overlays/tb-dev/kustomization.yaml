@@ -14,8 +14,8 @@ images:
   # tb-dev cluster (per-account ECR mirror or cross-account pull) -- see
   # thunderbird/platform-infrastructure#593.
   - name: REPLACE_ACCOUNTS_ECR/accounts
-    newName: REPLACE_TB_DEV_ACCOUNTS_ECR/accounts
-    newTag: REPLACE_IMAGE_TAG
+    newName: 718959508124.dkr.ecr.eu-central-1.amazonaws.com/accounts
+    newTag: 17f1e8ed1765d572dd91f03ed12dc326df60830c
 
 patches:
   # Env-specific, non-secret config (hosts, URLs, public base URL).
