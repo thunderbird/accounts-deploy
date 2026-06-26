@@ -7,7 +7,12 @@ metadata:
   name: accounts-config
   namespace: accounts
 data:
-  APP_ENV: "dev"
+  # 'stage' (not 'dev'): the app reads APP_ENV=dev as LOCAL dev (http, no proxy)
+  # and disables SECURE_PROXY_SSL_HEADER, so Django ignores the tailscale ingress's
+  # X-Forwarded-Proto and builds http:// OIDC redirect_uris (Keycloak then rejects
+  # them). This tailnet instance is behind an HTTPS proxy, so it must run as a
+  # deployed env to honor X-Forwarded-Proto and emit https:// redirect_uris.
+  APP_ENV: "stage"
   PUBLIC_BASE_URL: "https://accounts-tb-dev.tail2726a2.ts.net"
   ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
   # tailnet-only dev validation: accept any Host so the kubelet probe (Host = pod
