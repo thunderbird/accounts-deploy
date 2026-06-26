@@ -3,7 +3,7 @@
 # management API. Under POD_SECURITY_GROUP_ENFORCING_MODE=strict the listed SGs
 # REPLACE the node SG, so the EKS control-plane cluster SG must also be listed:
 #   - sg-07624df6ceb8865ec : tb-dev EKS control-plane cluster SG (pod<->control-plane)
-#   - REPLACE_TB_DEV_ACCOUNTS_POD_SG : mzla-tb-dev-accounts-pod, from the
+#   - sg-0dba8adea7684454f : mzla-tb-dev-accounts-pod, from the
 #       mzla-tb-dev pulumi output (thunderbird/platform-infrastructure#596)
 apiVersion: vpcresources.k8s.aws/v1beta1
 kind: SecurityGroupPolicy
@@ -17,4 +17,4 @@ spec:
   securityGroups:
     groupIds:
       - sg-07624df6ceb8865ec
-      - REPLACE_TB_DEV_ACCOUNTS_POD_SG
+      - sg-0dba8adea7684454f
