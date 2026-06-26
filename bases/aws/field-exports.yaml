@@ -1,0 +1,82 @@
+# ACK FieldExports publish the live RDS + Redis endpoints into ConfigMaps the app
+# reads. The seed ConfigMaps must exist first (the ACK controller has patch but
+# not create on ConfigMaps). The endpoint keys are carved out in the ArgoCD app's
+# ignoreDifferences so selfHeal does not revert the FieldExport-populated values.
+#
+# RDS -> accounts-db-endpoint (DATABASE_HOST/DATABASE_PORT, loaded via envFrom).
+# Redis -> accounts-redis-endpoint (REDIS_PRIMARY_ENDPOINT); REDIS_URL / CELERY_*
+# are composed from it at the app-wiring step (#598) since FieldExport cannot add
+# the rediss:// scheme.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: accounts-db-endpoint
+  namespace: accounts
+data:
+  DATABASE_HOST: "pending-field-export"
+  DATABASE_PORT: "5432"
+---
+apiVersion: services.k8s.aws/v1alpha1
+kind: FieldExport
+metadata:
+  name: accounts-db-host
+  namespace: accounts
+spec:
+  from:
+    path: ".status.endpoint.address"
+    resource:
+      group: rds.services.k8s.aws
+      kind: DBInstance
+      name: accounts-db
+  to:
+    name: accounts-db-endpoint
+    namespace: accounts
+    kind: configmap
+    key: DATABASE_HOST
+---
+apiVersion: services.k8s.aws/v1alpha1
+kind: FieldExport
+metadata:
+  name: accounts-db-port
+  namespace: accounts
+spec:
+  from:
+    path: ".status.endpoint.port"
+    resource:
+      group: rds.services.k8s.aws
+      kind: DBInstance
+      name: accounts-db
+  to:
+    name: accounts-db-endpoint
+    namespace: accounts
+    kind: configmap
+    key: DATABASE_PORT
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: accounts-redis-endpoint
+  namespace: accounts
+data:
+  REDIS_PRIMARY_ENDPOINT: "pending-field-export"
+---
+# NOTE: confirm the ElastiCache ReplicationGroup status path against the installed
+# ACK elasticache CRD before relying on this in a live sync.
+apiVersion: services.k8s.aws/v1alpha1
+kind: FieldExport
+metadata:
+  name: accounts-redis-endpoint
+  namespace: accounts
+spec:
+  from:
+    path: ".status.nodeGroups[0].primaryEndpoint.address"
+    resource:
+      group: elasticache.services.k8s.aws
+      kind: ReplicationGroup
+      name: accounts-redis
+  to:
+    name: accounts-redis-endpoint
+    namespace: accounts
+    kind: configmap
+    key: REDIS_PRIMARY_ENDPOINT

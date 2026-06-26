@@ -1,0 +1,14 @@
+---
+namespace: accounts
+
+# ACK-managed AWS resources for the Accounts service: net-new RDS Postgres +
+# ElastiCache Redis (data is migrated onto them at the cutover, #147), their
+# subnet groups, dedicated security groups, and FieldExports that publish the
+# endpoints into ConfigMaps the app reads. Mirrors the Stalwart pattern in
+# thundermail-deploy. Per-overlay patches set the VPC/subnet/SG ids and sizing.
+resources:
+  - security-groups.yaml
+  - subnet-groups.yaml
+  - db-instance.yaml
+  - elasticache.yaml
+  - field-exports.yaml

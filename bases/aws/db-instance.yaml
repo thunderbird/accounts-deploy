@@ -1,0 +1,49 @@
+# ACK-managed net-new RDS PostgreSQL for the Accounts service. Graviton ARM64,
+# encrypted; master credentials come from the `accounts-db` K8s Secret (synced by
+# ESO from Secrets Manager). Per-overlay patches set dbInstanceIdentifier,
+# dbInstanceClass, multiAZ, deletionProtection, storage, and the RDS SG id
+# (REPLACE_ACCOUNTS_RDS_SG -> the ACK accounts-rds SG, filled after first create).
+#
+# engineVersion: net-new at "16". Data is migrated onto this instance at the
+# cutover (#147) via dump/restore -- confirm this major version is >= the source
+# Accounts RDS version before the migration.
+apiVersion: rds.services.k8s.aws/v1alpha1
+kind: DBInstance
+metadata:
+  name: accounts-db
+  namespace: accounts
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  dbInstanceIdentifier: REPLACE_DB_IDENTIFIER
+  dbInstanceClass: db.t4g.small
+  engine: postgres
+  engineVersion: "16"
+  allocatedStorage: 20
+  maxAllocatedStorage: 100
+  storageType: gp3
+  storageEncrypted: true
+  multiAZ: false
+  dbName: accounts
+  masterUsername: accounts
+  masterUserPassword:
+    namespace: accounts
+    name: accounts-db
+    key: password
+  dbSubnetGroupName: accounts-db-subnets
+  vpcSecurityGroupIDs:
+    - REPLACE_ACCOUNTS_RDS_SG
+  backupRetentionPeriod: 7
+  preferredBackupWindow: "03:00-04:00"
+  preferredMaintenanceWindow: "sun:05:00-sun:06:00"
+  deletionProtection: false
+  copyTagsToSnapshot: true
+  performanceInsightsEnabled: true
+  performanceInsightsRetentionPeriod: 7
+  publiclyAccessible: false
+  autoMinorVersionUpgrade: true
+  tags:
+    - key: Service
+      value: thunderbird-pro-accounts
+    - key: ManagedBy
+      value: ack

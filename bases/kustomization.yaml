@@ -3,6 +3,7 @@ namespace: accounts
 
 resources:
   - accounts
+  - aws
 
 labels:
   - pairs:

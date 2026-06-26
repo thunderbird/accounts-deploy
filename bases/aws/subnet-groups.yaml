@@ -1,0 +1,41 @@
+# ACK-managed subnet groups placing the Accounts RDS + Redis in the cluster's
+# private subnets. subnetIDs are patched per overlay (the cluster's private
+# subnets, same as the Stalwart subnet groups in thundermail-deploy).
+---
+apiVersion: rds.services.k8s.aws/v1alpha1
+kind: DBSubnetGroup
+metadata:
+  name: accounts-db-subnets
+  namespace: accounts
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  name: accounts-db-subnets
+  description: "Accounts RDS - private subnets"
+  subnetIDs:
+    - REPLACE_PRIVATE_SUBNET_A
+    - REPLACE_PRIVATE_SUBNET_B
+  tags:
+    - key: Service
+      value: thunderbird-pro-accounts
+    - key: ManagedBy
+      value: ack
+---
+apiVersion: elasticache.services.k8s.aws/v1alpha1
+kind: CacheSubnetGroup
+metadata:
+  name: accounts-redis-subnets
+  namespace: accounts
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  cacheSubnetGroupName: accounts-redis-subnets
+  cacheSubnetGroupDescription: "Accounts Redis - private subnets"
+  subnetIDs:
+    - REPLACE_PRIVATE_SUBNET_A
+    - REPLACE_PRIVATE_SUBNET_B
+  tags:
+    - key: Service
+      value: thunderbird-pro-accounts
+    - key: ManagedBy
+      value: ack
