@@ -119,7 +119,7 @@ patches:
         value: 200
       - op: replace
         path: /spec/vpcSecurityGroupIDs/0
-        value: REPLACE_TB_PROD_ACCOUNTS_RDS_SG
+        value: sg-02f7427579613e347
   - target:
       group: elasticache.services.k8s.aws
       version: v1alpha1
@@ -131,4 +131,4 @@ patches:
         value: cache.t4g.small
       - op: replace
         path: /spec/securityGroupIDs/0
-        value: REPLACE_TB_PROD_ACCOUNTS_REDIS_SG
+        value: sg-05fe4e64b28d8b88a
