@@ -69,7 +69,9 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - celery --app thunderbird_accounts inspect ping -d celery@$HOSTNAME
+                # celery lives in the uv venv (entrypoint runs `uv run celery`);
+                # it is not on PATH, so use the venv binary directly.
+                - /app/.venv/bin/celery --app thunderbird_accounts inspect ping -d celery@$HOSTNAME
             initialDelaySeconds: 60
             periodSeconds: 60
             timeoutSeconds: 15
