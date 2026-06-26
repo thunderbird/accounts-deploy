@@ -19,7 +19,8 @@ data:
 
   # Auth scheme + OIDC (client id is non-secret; the secret is in accounts-secrets).
   AUTH_SCHEME: "oidc"
-  OIDC_CLIENT_ID: "tb-accounts"
+  # The accounts OIDC client in the tbpro realm is named "thunderbird-accounts".
+  OIDC_CLIENT_ID: "thunderbird-accounts"
   OIDC_SIGN_ALGO: "RS256"
 
   # Redis logical DBs (the connection URL itself is a secret).

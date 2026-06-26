@@ -16,12 +16,21 @@ data:
   DATABASE_NAME: "accounts"
   DATABASE_USER: "accounts"
 
-  # OIDC endpoints against the tbpro realm (dev Keycloak) -- finalized in #599.
-  OIDC_URL_AUTH: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/auth/"
-  OIDC_URL_TOKEN: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/token/"
-  OIDC_URL_USER: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/userinfo/"
-  OIDC_URL_JWKS: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/certs/"
-  OIDC_URL_LOGOUT: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/logout/"
+  # OIDC against the tbpro realm on the dev Customer Auth Keycloak (#599).
+  # Front-channel (browser redirects) uses the tailnet hostname; back-channel
+  # (server-to-server token/userinfo/jwks + admin API) uses the in-cluster
+  # Service, since the pod can't resolve/reach the tailnet MagicDNS name. The
+  # ID token issuer is the tailnet hostname (KC_HOSTNAME) either way.
+  OIDC_URL_AUTH: "https://keycloak-customer-tb-dev.tail2726a2.ts.net/realms/tbpro/protocol/openid-connect/auth/"
+  OIDC_URL_LOGOUT: "https://keycloak-customer-tb-dev.tail2726a2.ts.net/realms/tbpro/protocol/openid-connect/logout/"
+  OIDC_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/token/"
+  OIDC_URL_USER: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/userinfo/"
+  OIDC_URL_JWKS: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/certs/"
+
+  # Keycloak admin API (in-cluster) for the user-reconcile / MFA flows + /health.
+  # KEYCLOAK_URL_REALM is derived by the app from KEYCLOAK_URL_API.
+  KEYCLOAK_URL_API: "http://keycloak-customer.keycloak-customer.svc.cluster.local/admin/realms/tbpro"
+  KEYCLOAK_ADMIN_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/token/"
 
   # Stalwart management API (reached over VPC peering) -- finalized in #597.
   STALWART_BASE_API_URL: "REPLACE_TB_DEV_STALWART_API_URL"
