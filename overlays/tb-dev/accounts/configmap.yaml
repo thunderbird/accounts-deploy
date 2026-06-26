@@ -10,6 +10,10 @@ data:
   APP_ENV: "dev"
   PUBLIC_BASE_URL: "https://accounts-tb-dev.tail2726a2.ts.net"
   ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
+  # tailnet-only dev validation: accept any Host so the kubelet probe (Host = pod
+  # IP) and the tailnet ingress both pass. prod must pin this to the real host.
+  ALLOWED_HOSTS: "*"
+  CSRF_TRUSTED_ORIGINS: "https://accounts-tb-dev.tail2726a2.ts.net"
 
   # Accounts Postgres (net-new ACK RDS, #597). DATABASE_HOST/PORT come from the
   # accounts-db-endpoint ConfigMap (ACK FieldExport), not from here.
