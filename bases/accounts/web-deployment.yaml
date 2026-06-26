@@ -37,7 +37,9 @@ spec:
         app.kubernetes.io/component: web
     spec:
       securityContext:
-        runAsNonRoot: true
+        # The thunderbird-accounts image currently runs as root (no USER in its
+        # Dockerfile), so runAsNonRoot is not enforced. Making the image run
+        # non-root is a follow-up (a thunderbird-accounts change).
         seccompProfile:
           type: RuntimeDefault
       nodeSelector:
