@@ -9,8 +9,6 @@ kind: Ingress
 metadata:
   name: accounts-tb-prod
   namespace: accounts
-  annotations:
-    argocd.argoproj.io/sync-wave: "10"
 spec:
   ingressClassName: tailscale
   tls:
