@@ -110,7 +110,7 @@ patches:
         value: db.t4g.micro
       - op: replace
         path: /spec/vpcSecurityGroupIDs/0
-        value: REPLACE_TB_DEV_ACCOUNTS_RDS_SG
+        value: sg-0236e5fa6a3ec2d14
   - target:
       group: elasticache.services.k8s.aws
       version: v1alpha1
@@ -119,4 +119,4 @@ patches:
     patch: |-
       - op: replace
         path: /spec/securityGroupIDs/0
-        value: REPLACE_TB_DEV_ACCOUNTS_REDIS_SG
+        value: sg-0be1a8015ac9b2535
