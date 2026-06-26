@@ -43,7 +43,7 @@ patches:
         path: /spec/data/1/remoteRef/key
         value: mzla/tb-prod/accounts-db
   # ---- ACK data stores (net-new RDS + Redis), #597 ----
-  # VPC + pod SG (REPLACE_TB_PROD_ACCOUNTS_POD_SG from pulumi #596) on the SGs.
+  # VPC + pod SG (sg-0da6b8f9e6d229b01 from pulumi #596) on the SGs.
   - target:
       group: ec2.services.k8s.aws
       version: v1alpha1
@@ -55,7 +55,7 @@ patches:
         value: vpc-0c7a0ef4fdd2b8275
       - op: replace
         path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
-        value: REPLACE_TB_PROD_ACCOUNTS_POD_SG
+        value: sg-0da6b8f9e6d229b01
   - target:
       group: ec2.services.k8s.aws
       version: v1alpha1
@@ -67,7 +67,7 @@ patches:
         value: vpc-0c7a0ef4fdd2b8275
       - op: replace
         path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
-        value: REPLACE_TB_PROD_ACCOUNTS_POD_SG
+        value: sg-0da6b8f9e6d229b01
   # private subnets (same as the tb-prod Stalwart subnet groups)
   - target:
       group: rds.services.k8s.aws
