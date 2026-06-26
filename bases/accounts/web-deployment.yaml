@@ -63,11 +63,23 @@ spec:
             - name: http
               containerPort: 8087
               protocol: TCP
+          env:
+            # Net-new RDS master password (also the app DB password) from the
+            # accounts-db ExternalSecret; explicit env wins over the bundle.
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: accounts-db
+                  key: password
           envFrom:
             - configMapRef:
                 name: accounts-config
             - secretRef:
                 name: accounts-secrets
+            # DATABASE_HOST / DATABASE_PORT, populated by the ACK FieldExport
+            # once the RDS instance is available.
+            - configMapRef:
+                name: accounts-db-endpoint
           startupProbe:
             tcpSocket:
               port: http

@@ -32,3 +32,91 @@ patches:
       - op: replace
         path: /spec/dataFrom/0/extract/key
         value: mzla/tb-dev/accounts
+  # accounts-db master-password ExternalSecret -> mzla/tb-dev/*
+  - target:
+      group: external-secrets.io
+      version: v1
+      kind: ExternalSecret
+      name: accounts-db
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: mzla/tb-dev/accounts-db
+      - op: replace
+        path: /spec/data/1/remoteRef/key
+        value: mzla/tb-dev/accounts-db
+  # ---- ACK data stores (net-new RDS + Redis), #597 ----
+  # VPC + pod SG (REPLACE_TB_DEV_ACCOUNTS_POD_SG from pulumi #596) on the SGs.
+  - target:
+      group: ec2.services.k8s.aws
+      version: v1alpha1
+      kind: SecurityGroup
+      name: accounts-rds
+    patch: |-
+      - op: replace
+        path: /spec/vpcID
+        value: vpc-0e0f4b8d603d463e0
+      - op: replace
+        path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
+        value: REPLACE_TB_DEV_ACCOUNTS_POD_SG
+  - target:
+      group: ec2.services.k8s.aws
+      version: v1alpha1
+      kind: SecurityGroup
+      name: accounts-redis
+    patch: |-
+      - op: replace
+        path: /spec/vpcID
+        value: vpc-0e0f4b8d603d463e0
+      - op: replace
+        path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
+        value: REPLACE_TB_DEV_ACCOUNTS_POD_SG
+  # private subnets (same as the tb-dev Stalwart subnet groups)
+  - target:
+      group: rds.services.k8s.aws
+      version: v1alpha1
+      kind: DBSubnetGroup
+      name: accounts-db-subnets
+    patch: |-
+      - op: replace
+        path: /spec/subnetIDs
+        value:
+          - subnet-044e18f3022fb9ee1
+          - subnet-01084662e5e16dce9
+  - target:
+      group: elasticache.services.k8s.aws
+      version: v1alpha1
+      kind: CacheSubnetGroup
+      name: accounts-redis-subnets
+    patch: |-
+      - op: replace
+        path: /spec/subnetIDs
+        value:
+          - subnet-044e18f3022fb9ee1
+          - subnet-01084662e5e16dce9
+  # DBInstance identifier + RDS SG id (REPLACE_*_RDS_SG filled after the ACK SG
+  # is first created and its id is known).
+  - target:
+      group: rds.services.k8s.aws
+      version: v1alpha1
+      kind: DBInstance
+      name: accounts-db
+    patch: |-
+      - op: replace
+        path: /spec/dbInstanceIdentifier
+        value: mzla-tb-dev-accounts
+      - op: replace
+        path: /spec/dbInstanceClass
+        value: db.t4g.micro
+      - op: replace
+        path: /spec/vpcSecurityGroupIDs/0
+        value: REPLACE_TB_DEV_ACCOUNTS_RDS_SG
+  - target:
+      group: elasticache.services.k8s.aws
+      version: v1alpha1
+      kind: ReplicationGroup
+      name: accounts-redis
+    patch: |-
+      - op: replace
+        path: /spec/securityGroupIDs/0
+        value: REPLACE_TB_DEV_ACCOUNTS_REDIS_SG

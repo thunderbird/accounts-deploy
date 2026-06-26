@@ -12,8 +12,8 @@ data:
   PUBLIC_BASE_URL: "https://accounts-tb-prod.tail2726a2.ts.net"
   ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
 
-  # Accounts Postgres (RDS) reachable from EKS -- host finalized in #597.
-  DATABASE_HOST: "REPLACE_TB_PROD_DB_HOST"
+  # Accounts Postgres (net-new ACK RDS, #597). DATABASE_HOST/PORT come from the
+  # accounts-db-endpoint ConfigMap (ACK FieldExport), not from here.
   DATABASE_NAME: "accounts"
   DATABASE_USER: "accounts"
 

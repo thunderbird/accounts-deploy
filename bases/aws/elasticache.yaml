@@ -1,0 +1,31 @@
+# ACK-managed net-new ElastiCache Redis for the Accounts service (Django cache +
+# Celery broker/results). Single node, no replicas, transit + at-rest encryption
+# (mirrors the accounts ECS ElastiCache: num_cache_clusters 1, no failover). The
+# securityGroupIDs (REPLACE_ACCOUNTS_REDIS_SG -> the ACK accounts-redis SG) and
+# cacheNodeType are patched per overlay (filled after the SG is first created).
+apiVersion: elasticache.services.k8s.aws/v1alpha1
+kind: ReplicationGroup
+metadata:
+  name: accounts-redis
+  namespace: accounts
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicationGroupID: accounts-redis
+  description: "Accounts Redis - Django cache + Celery broker/results"
+  engine: redis
+  engineVersion: "7.1"
+  cacheNodeType: cache.t4g.micro
+  numNodeGroups: 1
+  replicasPerNodeGroup: 0
+  cacheSubnetGroupName: accounts-redis-subnets
+  securityGroupIDs:
+    - REPLACE_ACCOUNTS_REDIS_SG
+  transitEncryptionEnabled: true
+  atRestEncryptionEnabled: true
+  automaticFailoverEnabled: false
+  tags:
+    - key: Service
+      value: thunderbird-pro-accounts
+    - key: ManagedBy
+      value: ack
