@@ -1,0 +1,23 @@
+# Tailnet-only Ingress for the tb-prod Accounts web app during validation. The
+# whole service is private to the tailnet (like keycloak-customer tb-prod) -- no
+# public Cloudflare tunnel yet. At the prod cutover (#147) public auth moves to a
+# Cloudflare tunnel and accounts.tb.pro DNS flips from the ECS ALB to the tunnel.
+#
+# Operator appends .<TAILNET>.ts.net -> accounts-tb-prod.tail2726a2.ts.net
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: accounts-tb-prod
+  namespace: accounts
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - accounts-tb-prod
+  defaultBackend:
+    service:
+      name: accounts
+      port:
+        number: 80

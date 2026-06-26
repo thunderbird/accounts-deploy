@@ -1,0 +1,27 @@
+# tb-dev environment-specific, non-secret config. Layered over the base
+# accounts-config ConfigMap. Hosts/URLs marked REPLACE_* are finalized as the
+# data stores (#597) and OIDC wiring (#599) land.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: accounts-config
+  namespace: accounts
+data:
+  APP_ENV: "dev"
+  PUBLIC_BASE_URL: "https://accounts-tb-dev.tail2726a2.ts.net"
+  ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
+
+  # Accounts Postgres (RDS) reachable from EKS -- host finalized in #597.
+  DATABASE_HOST: "REPLACE_TB_DEV_DB_HOST"
+  DATABASE_NAME: "accounts"
+  DATABASE_USER: "accounts"
+
+  # OIDC endpoints against the tbpro realm (dev Keycloak) -- finalized in #599.
+  OIDC_URL_AUTH: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/auth/"
+  OIDC_URL_TOKEN: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/token/"
+  OIDC_URL_USER: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/userinfo/"
+  OIDC_URL_JWKS: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/certs/"
+  OIDC_URL_LOGOUT: "https://REPLACE_TB_DEV_KEYCLOAK_HOST/realms/tbpro/protocol/openid-connect/logout/"
+
+  # Stalwart management API (reached over VPC peering) -- finalized in #597.
+  STALWART_BASE_API_URL: "REPLACE_TB_DEV_STALWART_API_URL"

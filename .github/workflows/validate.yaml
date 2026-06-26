@@ -1,0 +1,28 @@
+name: validate
+
+concurrency:
+  group: validate
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Manifest-only repo: no image build/push, so no AWS OIDC (id-token) is needed
+# here (unlike thundermail-deploy). Read-only contents is sufficient to checkout
+# and run the kustomize build gate.
+permissions:
+  contents: read
+
+jobs:
+  kustomize-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build all Kustomize overlays
+        run: ./util/kustomize-build-all.sh

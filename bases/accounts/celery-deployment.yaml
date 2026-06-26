@@ -1,0 +1,70 @@
+# Accounts Celery worker (TBA_CELERY=yes runs `celery ... worker --beat`).
+#
+# The worker embeds beat (the scheduler) via --beat, so this MUST stay at a
+# SINGLE replica -- running multiple beats would double-fire scheduled tasks.
+# Splitting beat into its own singleton Deployment is a possible follow-up if the
+# worker ever needs to scale out.
+#
+# Same image + arm64 scheduling as the web Deployment; no Service (no inbound).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts-celery
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: celery
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: accounts
+      app.kubernetes.io/component: celery
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: accounts
+        app.kubernetes.io/component: celery
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      nodeSelector:
+        role: general
+        kubernetes.io/arch: arm64
+      containers:
+        - name: accounts-celery
+          image: REPLACE_ACCOUNTS_ECR/accounts:REPLACE_IMAGE_TAG
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: TBA_CELERY
+              value: "yes"
+          envFrom:
+            - configMapRef:
+                name: accounts-config
+            - secretRef:
+                name: accounts-secrets
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - celery --app thunderbird_accounts inspect ping -d celery@$HOSTNAME
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi

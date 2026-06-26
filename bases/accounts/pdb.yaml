@@ -1,0 +1,14 @@
+# PodDisruptionBudget for the Accounts web pods. Base keeps 1 web pod available;
+# with prod running >=2 replicas this allows a node drain to proceed one pod at a
+# time. (Celery is a single-replica worker and is intentionally not covered.)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: accounts-web
+  namespace: accounts
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: accounts
+      app.kubernetes.io/component: web
