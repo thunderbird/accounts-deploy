@@ -1,0 +1,28 @@
+# tb-prod environment-specific, non-secret config. Layered over the base
+# accounts-config ConfigMap. While tb-prod is in tailnet-only validation,
+# PUBLIC_BASE_URL is the tailnet host; it becomes https://accounts.tb.pro at the
+# public cutover (#147). Hosts marked REPLACE_* are finalized in #597 / #599.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: accounts-config
+  namespace: accounts
+data:
+  APP_ENV: "prod"
+  PUBLIC_BASE_URL: "https://accounts-tb-prod.tail2726a2.ts.net"
+  ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
+
+  # Accounts Postgres (RDS) reachable from EKS -- host finalized in #597.
+  DATABASE_HOST: "REPLACE_TB_PROD_DB_HOST"
+  DATABASE_NAME: "accounts"
+  DATABASE_USER: "accounts"
+
+  # OIDC endpoints against the tbpro realm (prod Keycloak, auth.tb.pro) -- #599.
+  OIDC_URL_AUTH: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/auth/"
+  OIDC_URL_TOKEN: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/token/"
+  OIDC_URL_USER: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/userinfo/"
+  OIDC_URL_JWKS: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/certs/"
+  OIDC_URL_LOGOUT: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/logout/"
+
+  # Stalwart management API (reached over VPC peering) -- finalized in #597.
+  STALWART_BASE_API_URL: "REPLACE_TB_PROD_STALWART_API_URL"

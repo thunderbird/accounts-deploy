@@ -1,0 +1,9 @@
+# tb-dev: single web replica. The default entrypoint runs `manage.py migrate`
+# on boot, so one replica avoids concurrent migrations during dev validation.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts-web
+  namespace: accounts
+spec:
+  replicas: 1

@@ -1,0 +1,15 @@
+---
+namespace: accounts
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - web-deployment.yaml
+  - celery-deployment.yaml
+  - service.yaml
+  - pdb.yaml
+  - externalsecret.yaml
+
+labels:
+  - pairs:
+      app: accounts

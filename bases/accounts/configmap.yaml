@@ -1,0 +1,41 @@
+# Non-secret runtime configuration for the Accounts (Django) app + Celery worker.
+# Injected into both containers via `envFrom: configMapRef`. Secret values
+# (SECRET_KEY, DB password, REDIS_URL, OIDC client secret, Keycloak admin creds,
+# Paddle/Zendesk/Sentry/DKIM tokens, ...) come from the `accounts-secrets`
+# ExternalSecret instead (see externalsecret.yaml).
+#
+# These are stable defaults shared by all environments. Environment-specific,
+# non-secret values (APP_ENV, PUBLIC_BASE_URL, the DATABASE_* host/name/user,
+# the OIDC_URL_* endpoints, STALWART_BASE_*_URL, ALLOWED_EMAIL_DOMAINS) are
+# layered on by each overlay's configmap patch.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: accounts-config
+  namespace: accounts
+data:
+  LOG_LEVEL: "INFO"
+  APP_DEBUG: "False"
+
+  # Auth scheme + OIDC (client id is non-secret; the secret is in accounts-secrets).
+  AUTH_SCHEME: "oidc"
+  OIDC_CLIENT_ID: "tb-accounts"
+  OIDC_SIGN_ALGO: "RS256"
+
+  # Redis logical DBs (the connection URL itself is a secret).
+  REDIS_INTERNAL_DB: "0"
+  REDIS_CELERY_DB: "5"
+  REDIS_CELERY_RESULTS_DB: "6"
+  REDIS_SHARED_DB: "10"
+
+  # CSRF hardening (served behind TLS-terminating ingress/tunnel).
+  CSRF_SECURE: "True"
+  CSRF_HTTPONLY: "True"
+
+  # Stalwart management API auth method (the token/string is a secret).
+  STALWART_API_AUTH_METHOD: "bearer"
+
+  # Hosted DKIM delegation defaults (the Cloudflare API token is a secret).
+  HOSTED_DKIM_DOMAIN: "dkim.thunderhosted.com"
+  HOSTED_DKIM_SELECTORS: "tm1,tm2,tm3"
+  HOSTED_DKIM_CLOUDFLARE_ENABLED: "true"

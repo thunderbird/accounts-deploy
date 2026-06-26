@@ -1,0 +1,9 @@
+---
+namespace: accounts
+
+resources:
+  - accounts
+
+labels:
+  - pairs:
+      app: accounts
