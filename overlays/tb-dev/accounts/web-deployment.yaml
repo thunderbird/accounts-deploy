@@ -1,5 +1,12 @@
 # tb-dev: single web replica. The default entrypoint runs `manage.py migrate`
 # on boot, so one replica avoids concurrent migrations during dev validation.
+#
+# Readiness: the base uses GET /health, which is a deep composite check (DB +
+# Keycloak admin API + Stalwart mgmt API). On the tailnet dev instance Stalwart
+# isn't wired yet (#597/#146), so /health 500s and the pod never joins the
+# Service endpoints. For dev validation, gate readiness on a lightweight TCP
+# check so the app serves (and login can be exercised) independent of the
+# optional deep deps. prod keeps the /health readiness from the base.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,3 +14,13 @@ metadata:
   namespace: accounts
 spec:
   replicas: 1
+  template:
+    spec:
+      containers:
+        - name: accounts
+          readinessProbe:
+            httpGet: null
+            tcpSocket:
+              port: http
+            periodSeconds: 15
+            failureThreshold: 3
