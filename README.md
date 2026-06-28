@@ -6,6 +6,11 @@ Django app + Celery worker — deployed to the Thunderbird Pro EKS clusters
 ArgoCD. Epic:
 [platform-infrastructure#144](https://github.com/thunderbird/platform-infrastructure/issues/144).
 
+**Setting up an environment?** See the living runbook:
+[`docs/eks-environment-setup.md`](docs/eks-environment-setup.md) — every step from
+image/ECR through data stores, secrets, OIDC wiring, validation, known temporary
+workarounds, and operational recipes.
+
 > **Initial scaffold.** Several values are `REPLACE_*` sentinels filled in by the
 > sibling sub-issues: the multi-arch image + ECR
 > ([#593](https://github.com/thunderbird/platform-infrastructure/issues/593)),
