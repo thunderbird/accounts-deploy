@@ -7,6 +7,7 @@ namespace: accounts
 resources:
   - ../../bases
   - accounts/tailscale-ingress.yaml
+  - accounts/flower-ingress.yaml
   - accounts/securitygrouppolicy.yaml
 
 images:

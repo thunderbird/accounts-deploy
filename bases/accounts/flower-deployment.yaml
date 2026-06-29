@@ -1,0 +1,88 @@
+# Accounts Flower — Celery monitoring UI (TBA_FLOWER=yes runs `celery … flower`
+# on :5555). Recreated from the legacy flower-{stage,prod} ECS services (docs
+# §12.3). Flower exposes broker internals, so its Service is reached ONLY via a
+# staff-only Tailscale ingress per overlay — never behind the customer LB.
+#
+# Single replica (the UI is stateless monitoring; no need to scale). Same image +
+# arm64 scheduling + securityContext + envFrom bundle as the celery worker, plus
+# the explicit DATABASE_PASSWORD ref. No --beat here (that lives on the worker).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts-flower
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: flower
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: accounts
+      app.kubernetes.io/component: flower
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: accounts
+        app.kubernetes.io/component: flower
+    spec:
+      securityContext:
+        # The thunderbird-accounts image currently runs as root (no USER in its
+        # Dockerfile), so runAsNonRoot is not enforced. Making the image run
+        # non-root is a follow-up (a thunderbird-accounts change).
+        seccompProfile:
+          type: RuntimeDefault
+      nodeSelector:
+        role: general
+        kubernetes.io/arch: arm64
+      containers:
+        - name: accounts-flower
+          image: REPLACE_ACCOUNTS_ECR/accounts:REPLACE_IMAGE_TAG
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: flower
+              containerPort: 5555
+              protocol: TCP
+          env:
+            - name: TBA_FLOWER
+              value: "yes"
+            # Net-new RDS master password (also the app DB password) from the
+            # accounts-db ExternalSecret; explicit env wins over the bundle.
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: accounts-db
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: accounts-config
+            - secretRef:
+                name: accounts-secrets
+            # DATABASE_HOST / DATABASE_PORT, populated by the ACK FieldExport
+            # once the RDS instance is available.
+            - configMapRef:
+                name: accounts-db-endpoint
+          readinessProbe:
+            tcpSocket:
+              port: flower
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: flower
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi

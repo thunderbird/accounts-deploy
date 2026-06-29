@@ -6,7 +6,9 @@ resources:
   - configmap.yaml
   - web-deployment.yaml
   - celery-deployment.yaml
+  - flower-deployment.yaml
   - service.yaml
+  - flower-service.yaml
   - pdb.yaml
   - externalsecret.yaml
   - db-externalsecret.yaml

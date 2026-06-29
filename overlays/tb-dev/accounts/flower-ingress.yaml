@@ -1,0 +1,20 @@
+# Staff-only tailnet Ingress for tb-dev Flower (Celery monitoring). Flower exposes
+# broker internals, so it is NEVER public and NEVER behind the customer LB (docs
+# §12.3). No tailscale.com/funnel annotation — funnel would expose it publicly.
+#
+# Operator appends .<TAILNET>.ts.net -> flower-tb-dev.tail2726a2.ts.net
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flower-tb-dev
+  namespace: accounts
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - flower-tb-dev
+  defaultBackend:
+    service:
+      name: accounts-flower
+      port:
+        number: 5555
