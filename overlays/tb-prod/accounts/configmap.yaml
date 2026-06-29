@@ -8,7 +8,15 @@ metadata:
   name: accounts-config
   namespace: accounts
 data:
-  APP_ENV: "prod"
+  # 'mzla-tb-prod' (any non-'dev' value): the app reads APP_ENV=dev as LOCAL dev
+  # (http, no proxy) and disables SECURE_PROXY_SSL_HEADER, so Django would ignore the
+  # ingress's X-Forwarded-Proto and emit http:// OIDC redirect_uris. The secure-proxy
+  # header is gated on `not IS_DEV`, so any non-'dev' value keeps https://. Using a
+  # per-env value (not 'prod') also names the Sentry environment and the PostHog env
+  # tag (both = APP_ENV), keeping EKS-prod telemetry in a distinct stream from the
+  # legacy ECS `prod`. Verified safe: nothing branches on APP_ENV/IS_STAGE/IS_PROD.
+  # See accounts-deploy docs §12.4 and platform-infrastructure#617.
+  APP_ENV: "mzla-tb-prod"
   PUBLIC_BASE_URL: "https://accounts-tb-prod.tail2726a2.ts.net"
   ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
 
