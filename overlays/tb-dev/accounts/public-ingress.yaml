@@ -1,10 +1,10 @@
 # STAGED, UNREFERENCED (thunderbird.dev public endpoint, platform-infrastructure#613
-# / #614, epic #144) — intentionally NOT listed in overlays/tb-prod/kustomization.yaml
-# yet, so nothing changes at ArgoCD sync and the working tailnet-only setup + OIDC stay
-# untouched. Flipping public is a gated Wave-2 cutover.
+# / #614, epic #144) — intentionally NOT listed in overlays/tb-dev/kustomization.yaml
+# yet, so nothing changes at ArgoCD sync and the working tailnet-only dev setup + OIDC
+# stay untouched. Flipping public is a gated cutover.
 #
 # This is the public AWS ALB front door for the customer-facing Accounts web app on the
-# NEW tb-prod cluster (mzla-eks-tb-prod01), as an ADDITIONAL, parallel endpoint to the
+# NEW tb-dev cluster (mzla-eks-tb-dev01), as an ADDITIONAL, parallel endpoint to the
 # legacy accounts.tb.pro (legacy is NOT touched / NOT migrated here).
 #
 # Edge architecture (DECISION):
@@ -12,7 +12,7 @@
 #     Controller (v3.4.0, SA aws-lb-controller in kube-system).
 #   - LBC Certificate Management (create-acm-cert): the controller AUTO-CREATES the
 #     ACM cert for the rule host, writes the DNS-validation record into the
-#     (ACK-managed) tb-prod.thunderbird.dev sub-zone, waits for ISSUED, and attaches
+#     (ACK-managed) tb-dev.thunderbird.dev sub-zone, waits for ISSUED, and attaches
 #     it to the HTTPS:443 listener. No ACM ARN to fill in, no ACK acm cert CR, no
 #     DNS-validation glue. (Requires the controller-side feature gate
 #     EnableCertificateManagement=true; that lives in the LBC install, not here.)
@@ -53,11 +53,11 @@ metadata:
     alb.ingress.kubernetes.io/actions.deny-admin: >-
       {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden: admin is available over the tailnet only."}}
     # external-dns (AWS provider, #625) publishes the public record for this host.
-    external-dns.alpha.kubernetes.io/hostname: accounts.tb-prod.thunderbird.dev
+    external-dns.alpha.kubernetes.io/hostname: accounts.tb-dev.thunderbird.dev
 spec:
   ingressClassName: alb
   rules:
-    - host: accounts.tb-prod.thunderbird.dev
+    - host: accounts.tb-dev.thunderbird.dev
       http:
         paths:
           # Deny rules FIRST so they win over the catch-all forward below.
