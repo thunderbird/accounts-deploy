@@ -414,6 +414,22 @@ under platform-infrastructure#144.
     `KC_HOSTNAME_ADMIN` (public `/admin` denied at the edge).
   - App-level `is_staff` / `is_superuser` gating stays as defense-in-depth.
 
+- **Staging (Wave 1, non-disruptive — #615 part A):** the public ALB deny is authored as
+  `overlays/tb-prod/accounts/public-ingress.yaml` but is **STAGED-UNREFERENCED** — it is
+  deliberately NOT in `overlays/tb-prod/kustomization.yaml` so nothing changes at sync. It
+  is an `ingressClassName: alb` Ingress that serves `host: REPLACE_PUBLIC_HOST` and returns
+  a fixed-response **403** for `/admin*` and `/mail/admin*` (rules ordered before the
+  catch-all `/` forward to the accounts Service). TLS is Mode A: the public LB terminates
+  with `REPLACE_ACM_CERT_ARN` and forwards; accounts/Keycloak keep proxy-header handling.
+- **Non-disruptive intent for the existing tailnet ingress:** the current
+  `accounts-<env>` Tailscale ingress (`tailscale-ingress.yaml`) already routes the WHOLE
+  service over the tailnet during validation and remains the staff path to `/admin*`. It is
+  intentionally **left as-is** here (no rename/repoint) so the current dev/prod tailnet URL
+  keeps working. At Wave 2 (public cutover, #147) the public ALB ingress is referenced in
+  the kustomization, the deny takes effect at the edge, and the tailnet ingress continues to
+  serve staff admin — at which point it may optionally be narrowed/renamed to an
+  admin-specific host. Until then no behavior changes.
+
 ### 12.3 Flower (Celery monitoring) — recreate from legacy
 
 - Legacy runs `flower-{stage,prod}` ECS (Flower UI, port **5555**, `TBA_FLOWER=yes` →

@@ -1,0 +1,62 @@
+# STAGED, UNREFERENCED (Wave 2 / prod public cutover, #147) — intentionally NOT
+# listed in overlays/tb-prod/kustomization.yaml yet. This is the public AWS ALB
+# edge for the customer-facing Accounts surface. It implements the admin/staff
+# split at the edge (docs §12.2): customer paths are served, while the Django
+# admin (/admin*) and the staff Stalwart route (/mail/admin*) are DENIED with a
+# fixed 403 so staff must reach admin over the tailnet ingress instead.
+#
+# Decisions baked in:
+#   - Mode A TLS: the public NLB/ALB terminates TLS with an ACM cert and forwards;
+#     Keycloak/accounts keep proxy-header (xforwarded) handling. ssl-cert ARN below.
+#   - Rule ORDER matters: the two deny rules (/admin, /mail/admin) MUST precede the
+#     catch-all "/" forward so the deny wins for those prefixes. The ALB controller
+#     orders rules by their appearance here.
+#   - The 403 is served by the ALB itself (actions.<name> annotation, type
+#     fixed-response) — no pod round-trip, so admin paths never touch the app from
+#     the public edge. App-level is_staff/is_superuser gating stays as defense in depth.
+#
+# Placeholders (fill at Wave 2): REPLACE_PUBLIC_HOST (e.g. accounts.tb.pro),
+# REPLACE_ACM_CERT_ARN (regional ACM cert for the public host).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: accounts-public
+  namespace: accounts
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: REPLACE_ACM_CERT_ARN
+    # Fixed-response 403 action reused by both deny rules below.
+    alb.ingress.kubernetes.io/actions.deny-admin: >-
+      {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden: admin is available over the tailnet only."}}
+spec:
+  ingressClassName: alb
+  rules:
+    - host: REPLACE_PUBLIC_HOST
+      http:
+        paths:
+          # Deny rules FIRST so they win over the catch-all forward below.
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: deny-admin
+                port:
+                  name: use-annotation
+          - path: /mail/admin
+            pathType: Prefix
+            backend:
+              service:
+                name: deny-admin
+                port:
+                  name: use-annotation
+          # Catch-all: forward customer traffic to the accounts web Service.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: accounts
+                port:
+                  number: 80
