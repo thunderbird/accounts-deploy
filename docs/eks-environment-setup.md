@@ -213,14 +213,25 @@ These keep **dev** working but must be resolved before the prod cutover (#142):
 
 | Workaround (dev) | Why | Durable fix |
 |------------------|-----|-------------|
-| Keycloak `patch-login-theme` initContainer (seds `?no_esc` onto the whole login theme) | KC 26.5.7 HTML-escapes Freemarker → `&amp;` in `window._page` URLs → login/flows 400 | Merge thunderbird-accounts **PR #1030** (theme `?no_esc`), rebuild + re-mirror image, drop the initContainer |
-| StatefulSet `command` override forcing `--proxy-headers xforwarded` | image `entry.sh`/`entry-keycloak.sh` hardcodes `--proxy-headers forwarded` (CLI wins over `KC_PROXY_HEADERS`) → non-secure cookie context behind the proxy | Make the entrypoint honor `KC_PROXY_HEADERS` (default `xforwarded`); rebuild image |
-| Moving `quay.io/keycloak/keycloak:26.5` base tag | escaping behavior drifted silently to 26.5.7 | Pin `Dockerfile.keycloak` to a specific `26.5.x` / digest (both stages) |
+| StatefulSet `command` override forcing `--proxy-headers xforwarded` | The Tailscale ingress sends only `X-Forwarded-*`, but the image entrypoint hardcodes `--proxy-headers forwarded` (the CLI flag wins over `KC_PROXY_HEADERS`). Keycloak then sees a **non-secure context** → sets `AUTH_SESSION_ID` `SameSite=None` **without `Secure`** → the browser drops it → login **400 "Cookie not found"**. | **Cutover ingress/LB design** (platform-infrastructure#142): front Keycloak so it sees HTTPS directly (TLS passthrough / HTTPS backend) → the proxy-headers mode is moot. *(If the LB instead terminates TLS and forwards HTTP + `X-Forwarded-Proto`, Keycloak must run `xforwarded`.)* |
 | `ALLOWED_HOSTS: "*"` (dev) | dev convenience | pin `ALLOWED_HOSTS` + `CSRF_TRUSTED_ORIGINS` to `<public-host>` for prod |
 | Live Keycloak client edits (redirect / post-logout URIs) | branch DB, done by hand | codify in realm config (§7) |
+| Moving `quay.io/keycloak/keycloak:26.5` base tag | non-reproducible builds (silently tracks the latest `26.5.x`) | pin `Dockerfile.keycloak` to a specific patch / digest (both stages) |
 | Neon-branch dev DB | fast dev clone | prod uses the net-new ACK RDS, migrate at cutover |
 | prod app layer not deployed; `mzla/tb-prod/accounts` secret missing | validation phase | create the secret, then sync `tb-prod-accounts` |
 | prod cutover files staged-but-unreferenced (cloudflare-tunnel, admin-ingress, PDB minAvailable=2) | validation phase | at cutover: reference them, flip `KC_HOSTNAME`→`<public-host>`, set `KC_HOSTNAME_ADMIN`, scale to 3 replicas |
+
+> **Corrected root cause (this was misdiagnosed earlier).** The dev login 400 was
+> **"Cookie not found"** — the auth-session cookie wasn't being stored, because of
+> the non-secure proxy context in the first row — **not** the tbpro theme
+> HTML-escaping the loginAction (`&amp;`). The `&amp;` is harmless: Keycloak recovers
+> `execution` from the cookie, and `auth-stage.tb.pro` renders the identical `&amp;`
+> and logs in fine. Proven by a three-way test (good `&` + cookie → 200; `&amp;` +
+> cookie → 200 identical; good `&` + no cookie → **400 "Cookie not found"**). The
+> earlier theme `?no_esc` override (a `patch-login-theme` initContainer) was removed
+> (keycloak-customer-deploy#11), thunderbird-accounts PR #1030 was dropped, and the
+> entrypoint-fix issue (#1037) was closed in favor of the cutover LB design. The
+> **only** load-bearing dev Keycloak override is now `--proxy-headers xforwarded`.
 
 ---
 
@@ -361,3 +372,76 @@ Whole-secret `dataFrom`. **Key names only — no values.** (Same list is in
 - `STALWART_BASE_API_URL` — placeholder.
 - Keycloak post-logout redirect URI — not yet registered.
 - prod: `mzla/tb-prod/accounts` secret missing; prod app layer not yet synced.
+
+---
+
+## 12. Target production design (endpoints, observability)
+
+Not built yet — the agreed target shape. Net-new items are candidates for sub-issues
+under platform-infrastructure#144.
+
+### 12.1 Customer-facing endpoints: load balancer + DNS
+
+- Each customer-facing service (accounts at `<public-host>`, Customer Auth at the auth
+  host) is fronted by a public **AWS load balancer** + a **DNS record on Cloudflare**
+  (the customer domains live in Cloudflare).
+- **DNS is not codified in-cluster yet.** The existing `external-dns`
+  (`platform-infrastructure: argocd/apps/external-dns.yaml`) runs on the shared-services cluster
+  with **`provider: aws` (Route53)** scoped to an internal Route53 zone — it does **not**
+  manage Cloudflare.
+- **Net-new: add a Cloudflare-provider `external-dns`** to `mzla-eks-tb-{dev,prod}`:
+  - Cloudflare API token via ESO (mirror `argocd/resources/cloudflare-externalsecret.yaml`).
+  - per-cluster `txtOwnerId` (e.g. `mzla-eks-tb-<env>01`), `domainFilters` scoped to the
+    customer zone, `policy: sync`, `sources: [service, ingress]`.
+  - writes/updates Cloudflare records pointing at the LBs from Service/Ingress annotations.
+- Already in the org as an alternative: `cloudflare-tunnel-operator` (argocd/grafana; staged
+  for prod keycloak via `cloudflare-tunnel.yaml`). **Decision: LB + external-dns** for
+  customer traffic (a normal public LB endpoint), not a tunnel.
+- **Secure-context tie-in (cookies):** the LB TLS mode is the durable resolution of the
+  dev `--proxy-headers xforwarded` workaround (§9). TLS passthrough / HTTPS backend →
+  Keycloak sees HTTPS directly → no `--proxy-headers` dependency. Terminate-TLS +
+  forward HTTP → Keycloak must keep `xforwarded`.
+
+### 12.2 Admin / staff surfaces: split to Tailscale (private)
+
+- **Accounts admin** is Django admin under the **`/admin/*`** path (hardcoded in
+  `urls.py`; includes the custom `admin/authentication/...import...` routes), plus the
+  staff route **`/mail/admin/stalwart/`**. Same app/pod — not a separate service.
+- Split at the **edge**, not the app:
+  - Public LB ingress serves customer paths and **denies `/admin*` and `/mail/admin*`**.
+  - A **Tailscale ingress** routes to the accounts Service so staff reach admin only over
+    the tailnet — mirroring the Customer Auth Keycloak's `tailscale-admin-ingress.yaml` +
+    `KC_HOSTNAME_ADMIN` (public `/admin` denied at the edge).
+  - App-level `is_staff` / `is_superuser` gating stays as defense-in-depth.
+
+### 12.3 Flower (Celery monitoring) — recreate from legacy
+
+- Legacy runs `flower-{stage,prod}` ECS (Flower UI, port **5555**, `TBA_FLOWER=yes` →
+  `celery … flower`), behind an LB (e.g. `flower.<domain>`).
+- EKS net-new: a `flower` Deployment (`TBA_FLOWER=yes`, same image, single replica) +
+  Service (5555) + a **Tailscale ingress** (staff-only — Flower exposes broker internals,
+  **never public**; not behind the customer LB).
+
+### 12.4 Observability environments: Sentry + PostHog
+
+- **Single knob:** set **`APP_ENV=mzla-tb-dev`** (dev) / **`APP_ENV=mzla-tb-prod`** (prod),
+  replacing the current `APP_ENV=stage` on tb-dev (which mixes EKS-dev into the real
+  `stage` streams).
+- **Verified safe** — nothing branches on `APP_ENV`/`IS_STAGE`/`IS_PROD` for behavior
+  (only `settings.py` for Sentry/DEBUG, and `telemetry/client.py` passes `APP_ENV` as the
+  env tag), and secure-proxy is gated on `not IS_DEV`, so any non-`dev` value keeps the
+  HTTPS redirect-URI behavior. This **un-parks** the earlier APP_ENV question.
+- One knob sets **both**:
+  - **Sentry**: `sentry_sdk.init(environment=APP_ENV)` → `mzla-tb-dev` / `mzla-tb-prod`.
+    Create those environments in Sentry.
+  - **PostHog**: `telemetry/client.py` tags events with `environment: APP_ENV` → same env.
+    Set `POSTHOG_API_KEY` per env in SM (new project, or shared project distinguished by
+    the env tag); `POSTHOG_HOST` defaults to `https://us.i.posthog.com`.
+
+### 12.5 Net-new work items (candidate #144 sub-issues)
+
+- Cloudflare-provider `external-dns` on tb-{dev,prod} → codified customer DNS
+- public LB + DNS records for accounts + Customer Auth
+- admin/staff split to Tailscale (accounts) + edge-deny of `/admin`
+- Flower Deployment + tailnet ingress
+- flip `APP_ENV` → `mzla-tb-{dev,prod}`; create Sentry envs + per-env PostHog keys
