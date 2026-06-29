@@ -7,12 +7,15 @@ metadata:
   name: accounts-config
   namespace: accounts
 data:
-  # 'stage' (not 'dev'): the app reads APP_ENV=dev as LOCAL dev (http, no proxy)
-  # and disables SECURE_PROXY_SSL_HEADER, so Django ignores the tailscale ingress's
-  # X-Forwarded-Proto and builds http:// OIDC redirect_uris (Keycloak then rejects
-  # them). This tailnet instance is behind an HTTPS proxy, so it must run as a
-  # deployed env to honor X-Forwarded-Proto and emit https:// redirect_uris.
-  APP_ENV: "stage"
+  # 'mzla-tb-dev' (any non-'dev' value): the app reads APP_ENV=dev as LOCAL dev
+  # (http, no proxy) and disables SECURE_PROXY_SSL_HEADER, so Django would ignore the
+  # tailscale ingress's X-Forwarded-Proto and emit http:// OIDC redirect_uris. The
+  # secure-proxy header is gated on `not IS_DEV`, so any non-'dev' value keeps https://.
+  # Using a per-env value (not 'stage') also names the Sentry environment and the
+  # PostHog env tag (both = APP_ENV), keeping EKS-dev telemetry out of the real `stage`
+  # streams. Verified safe: nothing branches on APP_ENV/IS_STAGE/IS_PROD. See
+  # accounts-deploy docs §12.4 and platform-infrastructure#617.
+  APP_ENV: "mzla-tb-dev"
   PUBLIC_BASE_URL: "https://accounts-tb-dev.tail2726a2.ts.net"
   ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
   # tailnet-only dev validation: accept any Host so the kubelet probe (Host = pod
