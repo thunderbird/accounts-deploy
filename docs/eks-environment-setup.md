@@ -402,6 +402,37 @@ under platform-infrastructure#144.
   Keycloak sees HTTPS directly → no `--proxy-headers` dependency. Terminate-TLS +
   forward HTTP → Keycloak must keep `xforwarded`.
 
+#### 12.1.a thunderbird.dev public-endpoint plan (LOCKED — supersedes the Cloudflare sketch above)
+
+The customer-facing public endpoint for the NEW clusters is on **`thunderbird.dev`**, not
+Cloudflare. Decisions locked (platform-infrastructure#613/#614, epic #144):
+
+- **Zone + delegation:** `thunderbird.dev` is a Route53 zone in the **legacy** account.
+  Per-env sub-zones **`tb-dev.thunderbird.dev`** / **`tb-prod.thunderbird.dev`** are
+  **delegated (NS records)** into the NEW accounts (mzla-tb-dev / mzla-tb-prod).
+- **external-dns is SAME-ACCOUNT** on each new cluster — **AWS provider (Route53), IRSA**
+  — managing only its delegated sub-zone. **Not Cloudflare.** This replaces the
+  Cloudflare-provider `external-dns` direction sketched in §12.1 above for these clusters.
+- **App hostnames:** `<app>.<env>.thunderbird.dev` —
+  `accounts.tb-dev.thunderbird.dev`, `auth.tb-dev.thunderbird.dev` (and the `tb-prod`
+  equivalents). **Public apps: accounts + auth (keycloak) only.**
+- **TLS:** one **wildcard ACM cert per env** — `*.<env>.thunderbird.dev` (eu-central-1) —
+  covers all public apps on that cluster. Referenced by the NLB `ssl-cert` annotation.
+- **Staff surfaces stay tailnet-only:** Django `/admin*`, `/mail/admin*`, and Flower are
+  **NOT** exposed on the public NLB (see §12.2 / §12.3).
+- **No legacy cutover:** these are ADDITIONAL, parallel endpoints. `auth.tb.pro` /
+  `accounts.tb.pro` and all legacy resources are **untouched** (no migration here).
+
+**Accounts NLB (staged-unreferenced, this PR):** `overlays/tb-{dev,prod}/accounts/loadbalancer-service.yaml`
+is an internet-facing AWS NLB `Service` (Mode A: `aws-load-balancer-type: external`,
+`nlb-target-type: ip`, `scheme: internet-facing`, `ssl-cert` =
+`REPLACE_<ENV>_WILDCARD_ACM_ARN`, `ssl-ports "443"`) to the accounts web pods on
+`:8087`, with `external-dns hostname accounts.<env>.thunderbird.dev`. It is **deliberately
+NOT referenced** in `overlays/<env>/kustomization.yaml`, so the working tailnet dev setup +
+OIDC are untouched. **Flipping public is gated** on: the delegated sub-zone live, the
+wildcard ACM cert issued/validated, and a coordinated OIDC redirect-URI update (accounts
+OIDC config + the Keycloak `thunderbird-accounts` client).
+
 ### 12.2 Admin / staff surfaces: split to Tailscale (private)
 
 - **Accounts admin** is Django admin under the **`/admin/*`** path (hardcoded in
