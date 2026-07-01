@@ -6,6 +6,10 @@ namespace: accounts
 
 resources:
   - ../../bases
+  # Public internet-facing ALB Ingress for the customer web app
+  # (accounts.tb-dev.thunderbird.dev, thunderbird.dev TEST domain). /admin +
+  # /mail/admin are denied 403 at the edge; Flower + admin stay tailnet-only.
+  - accounts/public-ingress.yaml
   - accounts/tailscale-ingress.yaml
   - accounts/flower-ingress.yaml
   - accounts/securitygrouppolicy.yaml

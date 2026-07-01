@@ -49,6 +49,11 @@ metadata:
     # for ISSUED, and attaches it to the HTTPS listener. Supersedes a static
     # certificate-arn / ACK acm cert.
     alb.ingress.kubernetes.io/create-acm-cert: "true"
+    # Target-group health check: no healthcheck-path is set, so the ALB probes the
+    # traffic port (8087) at "/". Django "/" commonly 30x-redirects (login/locale) and
+    # /health 500s on dev (Stalwart unwired), so accept 2xx-3xx to keep targets Healthy.
+    # Tighten to a known-200 liveness path at the real-domain cutover.
+    alb.ingress.kubernetes.io/success-codes: "200-399"
     # Fixed-response 403 action reused by both deny rules below.
     alb.ingress.kubernetes.io/actions.deny-admin: >-
       {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden: admin is available over the tailnet only."}}

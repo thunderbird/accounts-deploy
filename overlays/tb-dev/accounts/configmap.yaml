@@ -16,12 +16,15 @@ data:
   # streams. Verified safe: nothing branches on APP_ENV/IS_STAGE/IS_PROD. See
   # accounts-deploy docs §12.4 and platform-infrastructure#617.
   APP_ENV: "mzla-tb-dev"
-  PUBLIC_BASE_URL: "https://accounts-tb-dev.tail2726a2.ts.net"
+  # Public customer host (internet-facing ALB, thunderbird.dev TEST domain).
+  PUBLIC_BASE_URL: "https://accounts.tb-dev.thunderbird.dev"
   ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
-  # tailnet-only dev validation: accept any Host so the kubelet probe (Host = pod
-  # IP) and the tailnet ingress both pass. prod must pin this to the real host.
+  # Dev: accept any Host so the ALB target-group health check (Host = pod IP) and
+  # both ingresses pass. prod must pin this to the real host.
   ALLOWED_HOSTS: "*"
-  CSRF_TRUSTED_ORIGINS: "https://accounts-tb-dev.tail2726a2.ts.net"
+  # BOTH origins: the env var REPLACES (not appends), and the tailnet admin/staff
+  # POSTs still need their origin trusted alongside the public customer origin.
+  CSRF_TRUSTED_ORIGINS: "https://accounts.tb-dev.thunderbird.dev,https://accounts-tb-dev.tail2726a2.ts.net"
 
   # Accounts Postgres (net-new ACK RDS, #597). DATABASE_HOST/PORT come from the
   # accounts-db-endpoint ConfigMap (ACK FieldExport), not from here.
@@ -29,12 +32,13 @@ data:
   DATABASE_USER: "accounts"
 
   # OIDC against the tbpro realm on the dev Customer Auth Keycloak (#599).
-  # Front-channel (browser redirects) uses the tailnet hostname; back-channel
-  # (server-to-server token/userinfo/jwks + admin API) uses the in-cluster
-  # Service, since the pod can't resolve/reach the tailnet MagicDNS name. The
-  # ID token issuer is the tailnet hostname (KC_HOSTNAME) either way.
-  OIDC_URL_AUTH: "https://keycloak-customer-tb-dev.tail2726a2.ts.net/realms/tbpro/protocol/openid-connect/auth/"
-  OIDC_URL_LOGOUT: "https://keycloak-customer-tb-dev.tail2726a2.ts.net/realms/tbpro/protocol/openid-connect/logout/"
+  # Front-channel (browser redirects) uses the PUBLIC auth host, which is also the
+  # ID token issuer (keycloak KC_HOSTNAME = https://auth.tb-dev.thunderbird.dev).
+  # Back-channel (server-to-server token/userinfo/jwks + admin API) stays on the
+  # in-cluster Service (transport only; tokens carry iss = the public host, so it
+  # stays consistent with the front-channel host).
+  OIDC_URL_AUTH: "https://auth.tb-dev.thunderbird.dev/realms/tbpro/protocol/openid-connect/auth/"
+  OIDC_URL_LOGOUT: "https://auth.tb-dev.thunderbird.dev/realms/tbpro/protocol/openid-connect/logout/"
   OIDC_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/token/"
   OIDC_URL_USER: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/userinfo/"
   OIDC_URL_JWKS: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/certs/"
