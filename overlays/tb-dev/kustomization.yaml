@@ -1,127 +1,119 @@
----
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: accounts
-
 resources:
-  - ../../bases
-  # Public internet-facing ALB Ingress for the customer web app
-  # (accounts.tb-dev.thunderbird.dev, thunderbird.dev TEST domain). /admin +
-  # /mail/admin are denied 403 at the edge; Flower + admin stay tailnet-only.
-  - accounts/public-ingress.yaml
-  - accounts/tailscale-ingress.yaml
-  - accounts/flower-ingress.yaml
-  - accounts/securitygrouppolicy.yaml
-
+- ../../bases
+# Public internet-facing ALB Ingress for the customer web app
+# (accounts.tb-dev.thunderbird.dev, thunderbird.dev TEST domain). /admin +
+# /mail/admin are denied 403 at the edge; Flower + admin stay tailnet-only.
+- accounts/public-ingress.yaml
+- accounts/tailscale-ingress.yaml
+- accounts/flower-ingress.yaml
+- accounts/securitygrouppolicy.yaml
 images:
-  # Set to the multi-arch accounts image (arm64) once it is available to the
-  # tb-dev cluster (per-account ECR mirror or cross-account pull) -- see
-  # thunderbird/platform-infrastructure#593.
-  - name: REPLACE_ACCOUNTS_ECR/accounts
-    newName: 718959508124.dkr.ecr.eu-central-1.amazonaws.com/accounts
-    newTag: 17f1e8ed1765d572dd91f03ed12dc326df60830c
-
+- name: REPLACE_ACCOUNTS_ECR/accounts
+  newName: 718959508124.dkr.ecr.eu-central-1.amazonaws.com/accounts
+  digest: sha256:ffe77746d626b6b66fc1bf0528eb64e603f1789d137a94fc3df6fa0b81fe079f
 patches:
-  # Env-specific, non-secret config (hosts, URLs, public base URL).
-  - path: accounts/configmap.yaml
-  # dev runs a single web replica (migrations run on web boot; avoid concurrency).
-  - path: accounts/web-deployment.yaml
-  # ExternalSecret remoteRef key -> mzla/tb-dev/*
-  - target:
-      group: external-secrets.io
-      version: v1
-      kind: ExternalSecret
-      name: accounts-secrets
-    patch: |-
-      - op: replace
-        path: /spec/dataFrom/0/extract/key
-        value: mzla/tb-dev/accounts
-  # accounts-db master-password ExternalSecret -> mzla/tb-dev/*
-  - target:
-      group: external-secrets.io
-      version: v1
-      kind: ExternalSecret
-      name: accounts-db
-    patch: |-
-      - op: replace
-        path: /spec/data/0/remoteRef/key
-        value: mzla/tb-dev/accounts-db
-      - op: replace
-        path: /spec/data/1/remoteRef/key
-        value: mzla/tb-dev/accounts-db
-  # ---- ACK data stores (net-new RDS + Redis), #597 ----
-  # VPC + pod SG (sg-0dba8adea7684454f from pulumi #596) on the SGs.
-  - target:
-      group: ec2.services.k8s.aws
-      version: v1alpha1
-      kind: SecurityGroup
-      name: accounts-rds
-    patch: |-
-      - op: replace
-        path: /spec/vpcID
-        value: vpc-0e0f4b8d603d463e0
-      - op: replace
-        path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
-        value: sg-0dba8adea7684454f
-  - target:
-      group: ec2.services.k8s.aws
-      version: v1alpha1
-      kind: SecurityGroup
-      name: accounts-redis
-    patch: |-
-      - op: replace
-        path: /spec/vpcID
-        value: vpc-0e0f4b8d603d463e0
-      - op: replace
-        path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
-        value: sg-0dba8adea7684454f
-  # private subnets (same as the tb-dev Stalwart subnet groups)
-  - target:
-      group: rds.services.k8s.aws
-      version: v1alpha1
-      kind: DBSubnetGroup
-      name: accounts-db-subnets
-    patch: |-
-      - op: replace
-        path: /spec/subnetIDs
-        value:
-          - subnet-044e18f3022fb9ee1
-          - subnet-01084662e5e16dce9
-  - target:
-      group: elasticache.services.k8s.aws
-      version: v1alpha1
-      kind: CacheSubnetGroup
-      name: accounts-redis-subnets
-    patch: |-
-      - op: replace
-        path: /spec/subnetIDs
-        value:
-          - subnet-044e18f3022fb9ee1
-          - subnet-01084662e5e16dce9
-  # DBInstance identifier + RDS SG id (REPLACE_*_RDS_SG filled after the ACK SG
-  # is first created and its id is known).
-  - target:
-      group: rds.services.k8s.aws
-      version: v1alpha1
-      kind: DBInstance
-      name: accounts-db
-    patch: |-
-      - op: replace
-        path: /spec/dbInstanceIdentifier
-        value: mzla-tb-dev-accounts
-      - op: replace
-        path: /spec/dbInstanceClass
-        value: db.t4g.micro
-      - op: replace
-        path: /spec/vpcSecurityGroupIDs/0
-        value: sg-0236e5fa6a3ec2d14
-  - target:
-      group: elasticache.services.k8s.aws
-      version: v1alpha1
-      kind: ReplicationGroup
-      name: accounts-redis
-    patch: |-
-      - op: replace
-        path: /spec/securityGroupIDs/0
-        value: sg-0be1a8015ac9b2535
+# Env-specific, non-secret config (hosts, URLs, public base URL).
+- path: accounts/configmap.yaml
+# dev runs a single web replica (migrations run on web boot; avoid concurrency).
+- path: accounts/web-deployment.yaml
+# ExternalSecret remoteRef key -> mzla/tb-dev/*
+- target:
+    group: external-secrets.io
+    version: v1
+    kind: ExternalSecret
+    name: accounts-secrets
+  patch: |-
+    - op: replace
+      path: /spec/dataFrom/0/extract/key
+      value: mzla/tb-dev/accounts
+# accounts-db master-password ExternalSecret -> mzla/tb-dev/*
+- target:
+    group: external-secrets.io
+    version: v1
+    kind: ExternalSecret
+    name: accounts-db
+  patch: |-
+    - op: replace
+      path: /spec/data/0/remoteRef/key
+      value: mzla/tb-dev/accounts-db
+    - op: replace
+      path: /spec/data/1/remoteRef/key
+      value: mzla/tb-dev/accounts-db
+# ---- ACK data stores (net-new RDS + Redis), #597 ----
+# VPC + pod SG (sg-0dba8adea7684454f from pulumi #596) on the SGs.
+- target:
+    group: ec2.services.k8s.aws
+    version: v1alpha1
+    kind: SecurityGroup
+    name: accounts-rds
+  patch: |-
+    - op: replace
+      path: /spec/vpcID
+      value: vpc-0e0f4b8d603d463e0
+    - op: replace
+      path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
+      value: sg-0dba8adea7684454f
+- target:
+    group: ec2.services.k8s.aws
+    version: v1alpha1
+    kind: SecurityGroup
+    name: accounts-redis
+  patch: |-
+    - op: replace
+      path: /spec/vpcID
+      value: vpc-0e0f4b8d603d463e0
+    - op: replace
+      path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
+      value: sg-0dba8adea7684454f
+# private subnets (same as the tb-dev Stalwart subnet groups)
+- target:
+    group: rds.services.k8s.aws
+    version: v1alpha1
+    kind: DBSubnetGroup
+    name: accounts-db-subnets
+  patch: |-
+    - op: replace
+      path: /spec/subnetIDs
+      value:
+        - subnet-044e18f3022fb9ee1
+        - subnet-01084662e5e16dce9
+- target:
+    group: elasticache.services.k8s.aws
+    version: v1alpha1
+    kind: CacheSubnetGroup
+    name: accounts-redis-subnets
+  patch: |-
+    - op: replace
+      path: /spec/subnetIDs
+      value:
+        - subnet-044e18f3022fb9ee1
+        - subnet-01084662e5e16dce9
+# DBInstance identifier + RDS SG id (REPLACE_*_RDS_SG filled after the ACK SG
+# is first created and its id is known).
+- target:
+    group: rds.services.k8s.aws
+    version: v1alpha1
+    kind: DBInstance
+    name: accounts-db
+  patch: |-
+    - op: replace
+      path: /spec/dbInstanceIdentifier
+      value: mzla-tb-dev-accounts
+    - op: replace
+      path: /spec/dbInstanceClass
+      value: db.t4g.micro
+    - op: replace
+      path: /spec/vpcSecurityGroupIDs/0
+      value: sg-0236e5fa6a3ec2d14
+- target:
+    group: elasticache.services.k8s.aws
+    version: v1alpha1
+    kind: ReplicationGroup
+    name: accounts-redis
+  patch: |-
+    - op: replace
+      path: /spec/securityGroupIDs/0
+      value: sg-0be1a8015ac9b2535
