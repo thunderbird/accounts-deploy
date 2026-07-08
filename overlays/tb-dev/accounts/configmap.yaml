@@ -22,7 +22,10 @@ data:
   PADDLE_ENV: "sandbox"
   # Public customer host (internet-facing ALB, thunderbird.dev TEST domain).
   PUBLIC_BASE_URL: "https://accounts.tb-dev.thunderbird.dev"
-  ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
+  # Must match the tbpro Keycloak user domain (tb-dev is a stage clone: users are
+  # @stage-thundermail.com). First entry = PRIMARY_EMAIL_DOMAIN, which the admin
+  # Thundermail-address form requires. Matches stage's value.
+  ALLOWED_EMAIL_DOMAINS: "stage-thundermail.com"
   # Dev: accept any Host so the ALB target-group health check (Host = pod IP) and
   # both ingresses pass. prod must pin this to the real host.
   ALLOWED_HOSTS: "*"
@@ -50,7 +53,12 @@ data:
   # Keycloak admin API (in-cluster) for the user-reconcile / MFA flows + /health.
   # KEYCLOAK_URL_REALM is derived by the app from KEYCLOAK_URL_API.
   KEYCLOAK_URL_API: "http://keycloak-customer.keycloak-customer.svc.cluster.local/admin/realms/tbpro"
-  KEYCLOAK_ADMIN_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/token/"
+  # The admin client (KEYCLOAK_ADMIN_CLIENT_ID=tb-accounts-admin) is a service
+  # account in the MASTER realm (as on stage), so the client_credentials token
+  # grant must hit /realms/master (not tbpro) -- otherwise admin auth fails and
+  # user/mail provisioning + /health break. It still manages tbpro via
+  # KEYCLOAK_URL_API above.
+  KEYCLOAK_ADMIN_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/master/protocol/openid-connect/token/"
 
   # Stalwart management API (reached over VPC peering) -- finalized in #597.
   STALWART_BASE_API_URL: "REPLACE_TB_DEV_STALWART_API_URL"
