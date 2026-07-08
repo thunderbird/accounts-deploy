@@ -52,12 +52,19 @@ data:
 
   # Keycloak admin API (in-cluster) for the user-reconcile / MFA flows + /health.
   # KEYCLOAK_URL_REALM is derived by the app from KEYCLOAK_URL_API.
-  KEYCLOAK_URL_API: "http://keycloak-customer.keycloak-customer.svc.cluster.local/admin/realms/tbpro"
-  # The admin client (KEYCLOAK_ADMIN_CLIENT_ID=tb-accounts-admin) is a service
-  # account in the MASTER realm (as on stage), so the client_credentials token
-  # grant must hit /realms/master (not tbpro) -- otherwise admin auth fails and
-  # user/mail provisioning + /health break. It still manages tbpro via
-  # KEYCLOAK_URL_API above.
+  # MUST end with a trailing slash: the app builds admin URLs with urljoin()
+  # (clients.py), and urljoin(".../admin/realms/tbpro", "users/<id>") DROPS the
+  # realm -> ".../admin/realms/users/<id>" -> 404 "Realm not found". The slash
+  # makes tbpro a path segment so users/<id> appends correctly (matches stage).
+  KEYCLOAK_URL_API: "http://keycloak-customer.keycloak-customer.svc.cluster.local/admin/realms/tbpro/"
+  # Admin client for the accounts app's Keycloak admin ops. Codified here (was in
+  # the SM bundle as the non-existent `thunderbird-accounts-admin`): the client that
+  # exists in tb-dev's cloned master realm is `tb-accounts-admin` (a service account;
+  # the one config-cli uses). Its secret stays in the bundle as KEYCLOAK_ADMIN_CLIENT_SECRET.
+  KEYCLOAK_ADMIN_CLIENT_ID: "tb-accounts-admin"
+  # The admin client is a service account in the MASTER realm (as on stage), so the
+  # client_credentials token grant must hit /realms/master (not tbpro) -- otherwise
+  # admin auth fails. It still manages tbpro via KEYCLOAK_URL_API above.
   KEYCLOAK_ADMIN_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/master/protocol/openid-connect/token/"
 
   # Stalwart management API (reached over VPC peering) -- finalized in #597.
