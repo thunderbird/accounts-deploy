@@ -16,6 +16,10 @@ data:
   # streams. Verified safe: nothing branches on APP_ENV/IS_STAGE/IS_PROD. See
   # accounts-deploy docs §12.4 and platform-infrastructure#617.
   APP_ENV: "mzla-tb-dev"
+  # Paddle environment (non-secret). tb-dev uses the sandbox, matching the accounts
+  # STAGE setup; the PADDLE_TOKEN/API_KEY/WEBHOOK_KEY/PRICE_ID_* secrets come from the
+  # ESO bundle (mzla/tb-dev/accounts, extracted from the stage Paddle creds).
+  PADDLE_ENV: "sandbox"
   # Public customer host (internet-facing ALB, thunderbird.dev TEST domain).
   PUBLIC_BASE_URL: "https://accounts.tb-dev.thunderbird.dev"
   ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
