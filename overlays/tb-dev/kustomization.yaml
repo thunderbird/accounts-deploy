@@ -13,7 +13,7 @@ resources:
 images:
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: 718959508124.dkr.ecr.eu-central-1.amazonaws.com/accounts
-  digest: sha256:bfd9ee12f25d1a63d3c9e39153187eb8fad2ef897e547fb575a5549ef2307626
+  digest: sha256:6b98fa806a0f540465b5956280fdf45d36e50f3c1cca6fd1c0d901ebea957d35
 patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
