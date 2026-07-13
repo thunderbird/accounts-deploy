@@ -11,16 +11,14 @@ resources:
   - accounts/securitygrouppolicy.yaml
 
 images:
-  # Multi-arch (amd64 + arm64) accounts image, now published to GHCR by
+  # Multi-arch (amd64 + arm64) accounts image, published to GHCR by
   # thunderbird-accounts (publish-images.yml) -- this resolves the arm64
   # availability gap from thunderbird/platform-infrastructure#593 (the Pro EKS
   # clusters are Graviton/arm64; the deploy-stage ECR image is amd64-only).
-  # TODO before merge: pin to a specific published :<sha> (or use `digest:`), e.g.
-  #   digest: sha256:<published-digest>
-  # `latest` is an interim placeholder for this draft.
+  # Pinned to the thunderbird-accounts main commit sha that published the image.
   - name: REPLACE_ACCOUNTS_ECR/accounts
     newName: ghcr.io/thunderbird/thunderbird-accounts
-    newTag: latest
+    newTag: a1e790a9ba2c919d26bbc2162854a6d12498c423
 
 patches:
   # Env-specific, non-secret config (hosts, URLs, public base URL).
