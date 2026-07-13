@@ -11,11 +11,14 @@ resources:
   - accounts/securitygrouppolicy.yaml
 
 images:
-  # Set to the multi-arch accounts image (arm64) once available to tb-prod
-  # (per-account ECR mirror or cross-account pull) -- thunderbird/platform-infrastructure#593.
+  # Multi-arch (amd64 + arm64) accounts image, published to GHCR by
+  # thunderbird-accounts (publish-images.yml) -- this resolves the arm64
+  # availability gap from thunderbird/platform-infrastructure#593 (the Pro EKS
+  # clusters are Graviton/arm64; the deploy-stage ECR image is amd64-only).
+  # Pinned to the thunderbird-accounts main commit sha that published the image.
   - name: REPLACE_ACCOUNTS_ECR/accounts
-    newName: 689951664252.dkr.ecr.eu-central-1.amazonaws.com/accounts
-    newTag: 17f1e8ed1765d572dd91f03ed12dc326df60830c
+    newName: ghcr.io/thunderbird/thunderbird-accounts
+    newTag: a1e790a9ba2c919d26bbc2162854a6d12498c423
 
 patches:
   # Env-specific, non-secret config (hosts, URLs, public base URL).
