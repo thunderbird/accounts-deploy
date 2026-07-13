@@ -11,15 +11,10 @@ resources:
 - accounts/flower-ingress.yaml
 - accounts/securitygrouppolicy.yaml
 images:
-# Multi-arch (amd64 + arm64) accounts image, published to GHCR by
-# thunderbird-accounts (publish-images.yml). The Pro EKS clusters are Graviton
-# (arm64); the ECR image the deploy-stage pipeline builds is amd64-only, so EKS
-# pulls the multi-arch manifest from GHCR instead. Bootstrap digest pin;
-# ArgoCD Image Updater (repointed to the GHCR :latest tag) maintains this
-# digest going forward.
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
-  digest: sha256:d08cd75093685b06202138156897b5ce18da6d27139e09c2a59a7ee34176ece4
+  digest: sha256:674cd254d8e179c7beebc692bdaf52cd32f55600a67d204da24a1aee3244cd72
+  newTag: latest
 patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
