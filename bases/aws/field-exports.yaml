@@ -1,12 +1,30 @@
 # ACK FieldExports publish the live RDS + Redis endpoints into ConfigMaps the app
-# reads. The seed ConfigMaps must exist first (the ACK controller has patch but
-# not create on ConfigMaps). The endpoint keys are carved out in the ArgoCD app's
-# ignoreDifferences so selfHeal does not revert the FieldExport-populated values.
+# reads (via envFrom). The seed ConfigMaps below exist only so the endpoints have a
+# target: the ACK controller has PATCH but not CREATE on ConfigMaps, so Argo CD must
+# create them first.
 #
-# RDS -> accounts-db-endpoint (DATABASE_HOST/DATABASE_PORT, loaded via envFrom).
-# Redis -> accounts-redis-endpoint (REDIS_PRIMARY_ENDPOINT); REDIS_URL / CELERY_*
-# are composed from it at the app-wiring step (#598) since FieldExport cannot add
-# the rediss:// scheme.
+# CRITICAL: the seed ConfigMaps must NOT commit a value for any FieldExport-owned key
+# (DATABASE_HOST, REDIS_PRIMARY_ENDPOINT). Those keys are written at runtime by the
+# ACK controller; if git also carries a value, an Argo CD sync re-applies the committed
+# value and REVERTS the live endpoint back to the placeholder. That took tb-dev accounts
+# down: a Kargo promotion triggered a sync that reset DATABASE_HOST to "pending-field-
+# export", and Django then failed every DB query ("failed to resolve host 'pending-
+# field-export'"). The app's ignoreDifferences carve-out guards drift self-heal but does
+# NOT stop a full re-apply from writing the committed value, so the durable fix is to
+# never commit a value Argo CD can revert to -- the FieldExport is the SOLE writer of
+# each endpoint key. (Backstops still in place: ServerSideApply so Argo CD does not prune
+# the ACK-owned key, plus the app's ignoreDifferences on these /data paths.)
+#
+# DATABASE_PORT stays as a static key: it is a constant (5432) that matches what the
+# FieldExport would export, so it cannot clobber -- and keeping it static means the port
+# is present immediately (no db-port FieldExport needed). On a fresh deploy DATABASE_HOST
+# / REDIS_PRIMARY_ENDPOINT are simply absent until the FieldExport fires (after the RDS /
+# Redis instance reaches "available"); pods that start earlier restart once populated.
+#
+# RDS   -> accounts-db-endpoint    (DATABASE_HOST via FieldExport + static DATABASE_PORT)
+# Redis -> accounts-redis-endpoint (REDIS_PRIMARY_ENDPOINT via FieldExport); REDIS_URL /
+#          CELERY_* are composed from it at the app-wiring step (#598) since FieldExport
+#          cannot add the rediss:// scheme.
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -14,7 +32,9 @@ metadata:
   name: accounts-db-endpoint
   namespace: accounts
 data:
-  DATABASE_HOST: "pending-field-export"
+  # DATABASE_HOST is intentionally NOT set here -- it is written by the accounts-db-host
+  # FieldExport below. Committing a value would let an Argo CD sync revert the live RDS
+  # endpoint (see header). DATABASE_PORT is a static constant (non-clobbering).
   DATABASE_PORT: "5432"
 ---
 apiVersion: services.k8s.aws/v1alpha1
@@ -35,31 +55,14 @@ spec:
     kind: configmap
     key: DATABASE_HOST
 ---
-apiVersion: services.k8s.aws/v1alpha1
-kind: FieldExport
-metadata:
-  name: accounts-db-port
-  namespace: accounts
-spec:
-  from:
-    path: ".status.endpoint.port"
-    resource:
-      group: rds.services.k8s.aws
-      kind: DBInstance
-      name: accounts-db
-  to:
-    name: accounts-db-endpoint
-    namespace: accounts
-    kind: configmap
-    key: DATABASE_PORT
----
+# accounts-redis-endpoint: created empty so the FieldExport (patch-only) has a target.
+# REDIS_PRIMARY_ENDPOINT is written solely by the FieldExport below -- never seed a value.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: accounts-redis-endpoint
   namespace: accounts
-data:
-  REDIS_PRIMARY_ENDPOINT: "pending-field-export"
+data: {}
 ---
 # NOTE: confirm the ElastiCache ReplicationGroup status path against the installed
 # ACK elasticache CRD before relying on this in a live sync.
