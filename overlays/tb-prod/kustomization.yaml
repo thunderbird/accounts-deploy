@@ -1,138 +1,133 @@
----
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: accounts
-
 resources:
-  - ../../bases
-  - accounts/tailscale-ingress.yaml
-  - accounts/flower-ingress.yaml
-  - accounts/securitygrouppolicy.yaml
-
+- ../../bases
+- accounts/tailscale-ingress.yaml
+- accounts/flower-ingress.yaml
+- accounts/securitygrouppolicy.yaml
 images:
-  # Multi-arch (amd64 + arm64) accounts image, published to GHCR by
-  # thunderbird-accounts (publish-images.yml) -- this resolves the arm64
-  # availability gap from thunderbird/platform-infrastructure#593 (the Pro EKS
-  # clusters are Graviton/arm64; the deploy-stage ECR image is amd64-only).
-  # Pinned to the thunderbird-accounts main commit sha that published the image.
-  - name: REPLACE_ACCOUNTS_ECR/accounts
-    newName: ghcr.io/thunderbird/thunderbird-accounts
-    newTag: a1e790a9ba2c919d26bbc2162854a6d12498c423
-
+# Multi-arch (amd64 + arm64) accounts image, published to GHCR by
+# thunderbird-accounts (publish-images.yml) -- this resolves the arm64
+# availability gap from thunderbird/platform-infrastructure#593 (the Pro EKS
+# clusters are Graviton/arm64; the deploy-stage ECR image is amd64-only).
+# Pinned to the thunderbird-accounts main commit sha that published the image.
+- name: REPLACE_ACCOUNTS_ECR/accounts
+  newName: ghcr.io/thunderbird/thunderbird-accounts
+  digest: sha256:6bae681ffad1285475b27d9c82ae2d3e0ab29d6685b690619678aae72659c57f
 patches:
-  # Env-specific, non-secret config (hosts, URLs, public base URL).
-  - path: accounts/configmap.yaml
-  # ExternalSecret remoteRef key -> mzla/tb-prod/*
-  - target:
-      group: external-secrets.io
-      version: v1
-      kind: ExternalSecret
-      name: accounts-secrets
-    patch: |-
-      - op: replace
-        path: /spec/dataFrom/0/extract/key
-        value: mzla/tb-prod/accounts
-  # accounts-db master-password ExternalSecret -> mzla/tb-prod/*
-  - target:
-      group: external-secrets.io
-      version: v1
-      kind: ExternalSecret
-      name: accounts-db
-    patch: |-
-      - op: replace
-        path: /spec/data/0/remoteRef/key
-        value: mzla/tb-prod/accounts-db
-      - op: replace
-        path: /spec/data/1/remoteRef/key
-        value: mzla/tb-prod/accounts-db
-  # ---- ACK data stores (net-new RDS + Redis), #597 ----
-  # VPC + pod SG (sg-0da6b8f9e6d229b01 from pulumi #596) on the SGs.
-  - target:
-      group: ec2.services.k8s.aws
-      version: v1alpha1
-      kind: SecurityGroup
-      name: accounts-rds
-    patch: |-
-      - op: replace
-        path: /spec/vpcID
-        value: vpc-0c7a0ef4fdd2b8275
-      - op: replace
-        path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
-        value: sg-0da6b8f9e6d229b01
-  - target:
-      group: ec2.services.k8s.aws
-      version: v1alpha1
-      kind: SecurityGroup
-      name: accounts-redis
-    patch: |-
-      - op: replace
-        path: /spec/vpcID
-        value: vpc-0c7a0ef4fdd2b8275
-      - op: replace
-        path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
-        value: sg-0da6b8f9e6d229b01
-  # private subnets (same as the tb-prod Stalwart subnet groups)
-  - target:
-      group: rds.services.k8s.aws
-      version: v1alpha1
-      kind: DBSubnetGroup
-      name: accounts-db-subnets
-    patch: |-
-      - op: replace
-        path: /spec/subnetIDs
-        value:
-          - subnet-085a71891b27bd24c
-          - subnet-0b863a1876ec121cb
-  - target:
-      group: elasticache.services.k8s.aws
-      version: v1alpha1
-      kind: CacheSubnetGroup
-      name: accounts-redis-subnets
-    patch: |-
-      - op: replace
-        path: /spec/subnetIDs
-        value:
-          - subnet-085a71891b27bd24c
-          - subnet-0b863a1876ec121cb
-  # DBInstance: prod identifier + sizing (m7g.large, Multi-AZ, deletion
-  # protection, larger storage) + RDS SG id (filled after the ACK SG is created).
-  - target:
-      group: rds.services.k8s.aws
-      version: v1alpha1
-      kind: DBInstance
-      name: accounts-db
-    patch: |-
-      - op: replace
-        path: /spec/dbInstanceIdentifier
-        value: mzla-tb-prod-accounts
-      - op: replace
-        path: /spec/dbInstanceClass
-        value: db.m7g.large
-      - op: replace
-        path: /spec/multiAZ
-        value: true
-      - op: replace
-        path: /spec/deletionProtection
-        value: true
-      - op: replace
-        path: /spec/allocatedStorage
-        value: 50
-      - op: replace
-        path: /spec/maxAllocatedStorage
-        value: 200
-      - op: replace
-        path: /spec/vpcSecurityGroupIDs/0
-        value: sg-02f7427579613e347
-  - target:
-      group: elasticache.services.k8s.aws
-      version: v1alpha1
-      kind: ReplicationGroup
-      name: accounts-redis
-    patch: |-
-      - op: replace
-        path: /spec/cacheNodeType
-        value: cache.t4g.small
-      - op: replace
-        path: /spec/securityGroupIDs/0
-        value: sg-05fe4e64b28d8b88a
+# Env-specific, non-secret config (hosts, URLs, public base URL).
+- path: accounts/configmap.yaml
+# ExternalSecret remoteRef key -> mzla/tb-prod/*
+- target:
+    group: external-secrets.io
+    version: v1
+    kind: ExternalSecret
+    name: accounts-secrets
+  patch: |-
+    - op: replace
+      path: /spec/dataFrom/0/extract/key
+      value: mzla/tb-prod/accounts
+# accounts-db master-password ExternalSecret -> mzla/tb-prod/*
+- target:
+    group: external-secrets.io
+    version: v1
+    kind: ExternalSecret
+    name: accounts-db
+  patch: |-
+    - op: replace
+      path: /spec/data/0/remoteRef/key
+      value: mzla/tb-prod/accounts-db
+    - op: replace
+      path: /spec/data/1/remoteRef/key
+      value: mzla/tb-prod/accounts-db
+# ---- ACK data stores (net-new RDS + Redis), #597 ----
+# VPC + pod SG (sg-0da6b8f9e6d229b01 from pulumi #596) on the SGs.
+- target:
+    group: ec2.services.k8s.aws
+    version: v1alpha1
+    kind: SecurityGroup
+    name: accounts-rds
+  patch: |-
+    - op: replace
+      path: /spec/vpcID
+      value: vpc-0c7a0ef4fdd2b8275
+    - op: replace
+      path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
+      value: sg-0da6b8f9e6d229b01
+- target:
+    group: ec2.services.k8s.aws
+    version: v1alpha1
+    kind: SecurityGroup
+    name: accounts-redis
+  patch: |-
+    - op: replace
+      path: /spec/vpcID
+      value: vpc-0c7a0ef4fdd2b8275
+    - op: replace
+      path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
+      value: sg-0da6b8f9e6d229b01
+# private subnets (same as the tb-prod Stalwart subnet groups)
+- target:
+    group: rds.services.k8s.aws
+    version: v1alpha1
+    kind: DBSubnetGroup
+    name: accounts-db-subnets
+  patch: |-
+    - op: replace
+      path: /spec/subnetIDs
+      value:
+        - subnet-085a71891b27bd24c
+        - subnet-0b863a1876ec121cb
+- target:
+    group: elasticache.services.k8s.aws
+    version: v1alpha1
+    kind: CacheSubnetGroup
+    name: accounts-redis-subnets
+  patch: |-
+    - op: replace
+      path: /spec/subnetIDs
+      value:
+        - subnet-085a71891b27bd24c
+        - subnet-0b863a1876ec121cb
+# DBInstance: prod identifier + sizing (m7g.large, Multi-AZ, deletion
+# protection, larger storage) + RDS SG id (filled after the ACK SG is created).
+- target:
+    group: rds.services.k8s.aws
+    version: v1alpha1
+    kind: DBInstance
+    name: accounts-db
+  patch: |-
+    - op: replace
+      path: /spec/dbInstanceIdentifier
+      value: mzla-tb-prod-accounts
+    - op: replace
+      path: /spec/dbInstanceClass
+      value: db.m7g.large
+    - op: replace
+      path: /spec/multiAZ
+      value: true
+    - op: replace
+      path: /spec/deletionProtection
+      value: true
+    - op: replace
+      path: /spec/allocatedStorage
+      value: 50
+    - op: replace
+      path: /spec/maxAllocatedStorage
+      value: 200
+    - op: replace
+      path: /spec/vpcSecurityGroupIDs/0
+      value: sg-02f7427579613e347
+- target:
+    group: elasticache.services.k8s.aws
+    version: v1alpha1
+    kind: ReplicationGroup
+    name: accounts-redis
+  patch: |-
+    - op: replace
+      path: /spec/cacheNodeType
+      value: cache.t4g.small
+    - op: replace
+      path: /spec/securityGroupIDs/0
+      value: sg-05fe4e64b28d8b88a
