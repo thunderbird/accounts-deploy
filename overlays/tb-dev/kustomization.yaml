@@ -14,11 +14,21 @@ images:
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
   digest: sha256:6bae681ffad1285475b27d9c82ae2d3e0ab29d6685b690619678aae72659c57f
+# tb-dev HOTPATCH: generate a ConfigMap from the v0.16-ported clients.py. The
+# hashed name means each edit changes the CM name -> rolls the pods (Reloader also
+# covers it). Mounted via subPath in accounts/clients-hotpatch-mount.yaml.
+configMapGenerator:
+- name: accounts-clients-hotpatch
+  files:
+  - clients.py=hotpatch/clients.py
 patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
 # dev runs a single web replica (migrations run on web boot; avoid concurrency).
 - path: accounts/web-deployment.yaml
+# tb-dev HOTPATCH: mount the v0.16-ported clients.py over the image copy on all
+# three deployments (see accounts/clients-hotpatch-mount.yaml).
+- path: accounts/clients-hotpatch-mount.yaml
 # ExternalSecret remoteRef key -> mzla/tb-dev/*
 - target:
     group: external-secrets.io
