@@ -11,6 +11,11 @@ kind: Deployment
 metadata:
   name: accounts-flower
   namespace: accounts
+  annotations:
+    # Reloader: auto-restart on referenced ConfigMap/Secret change (envFrom does
+    # not hot-reload). No-op until the controller is installed
+    # (platform-infrastructure#784).
+    reloader.stakater.com/auto: "true"
   labels:
     app.kubernetes.io/name: accounts
     app.kubernetes.io/component: flower
