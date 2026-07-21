@@ -363,7 +363,9 @@ class MailClient:
             'name': principal_id,
             'description': full_name,
             'domainId': domain_id,
-            'emailAddress': primary_email,
+            # NOTE: emailAddress is server-derived from name@domain and is a "server set
+            # property" -- including it fails create with invalidPatch. The primary
+            # address comes from `name` (login local part) + `domainId`.
             # roles is a typed object (role preset), NOT a list like the v0.15 ['user'].
             'roles': {'@type': 'User'},
         }
@@ -487,10 +489,11 @@ class MailClient:
         """v0.16 JMAP port: update primary email and/or full name via a PatchObject."""
         patch: dict = {}
         if primary_email_address:
-            # v0.15 set `name`; v0.16 separates login `name` from `emailAddress`.
-            # We set both so the primary address changes as intended.
-            patch['name'] = primary_email_address
-            patch['emailAddress'] = primary_email_address
+            # v0.16: emailAddress is server-derived from name@domain and is a server-set
+            # property (cannot be patched directly). Change the login `name` (local part);
+            # the server re-derives the primary address. (A cross-domain change would also
+            # need domainId, not handled here.)
+            patch['name'] = primary_email_address.split('@')[0]
         if full_name:
             patch['description'] = full_name
 
