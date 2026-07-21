@@ -67,5 +67,15 @@ data:
   # admin auth fails. It still manages tbpro via KEYCLOAK_URL_API above.
   KEYCLOAK_ADMIN_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/master/protocol/openid-connect/token/"
 
-  # Stalwart management API (reached over VPC peering) -- finalized in #597.
-  STALWART_BASE_API_URL: "REPLACE_TB_DEV_STALWART_API_URL"
+  # Stalwart (Thundermail) admin API. Thundermail runs in THIS cluster (thundermail
+  # namespace, thundermail-deploy), so Accounts reaches it directly over the
+  # in-cluster ClusterIP Service -- no VPC peering, no admin-lb NLB hairpin. The app
+  # appends `/api` to this base (mail/clients.py). The stalwart-server pod SG must
+  # admit the accounts pod SG on 443 (thundermail-deploy overlays/tb-dev/
+  # stalwart-mail/aws/security-groups.yaml). Finalized in #597.
+  STALWART_BASE_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
+  # Stalwart serves its 443 cert for the public mail host (mail.dev-thundermail.com),
+  # not the in-cluster Service DNS name, so skip cert-name verification on this
+  # private in-cluster link (default is true). Traffic stays TLS-encrypted and never
+  # leaves the cluster/VPC.
+  VERIFY_PRIVATE_LINK_SSL: "false"
