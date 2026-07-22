@@ -406,32 +406,38 @@ class MailClient:
     # ------------------------------------------------------------------ #
 
     def save_app_password(self, principal_id: str, secret: str):
-        """v0.16 JMAP port: add an AppPassword credential (read-modify-write)."""
-        obj = self._get_account_raw(principal_id)
-        account_id = obj['id']
-        credentials = dict(obj.get('credentials') or {})
+        """v0.16 JMAP port: add a Password credential (client-supplied secret).
 
-        indices = [int(key) for key in credentials.keys() if str(key).isdigit()]
-        next_index = (max(indices) + 1) if indices else 0
-        # v0.16: AppPassword.secret is server-set (server generates it), so a client-
-        # supplied secret must go in a Password credential (its secret IS settable). This
-        # matches v0.15 semantics where the `secrets` list held additional login passwords.
-        credentials[str(next_index)] = {'@type': 'Password', 'secret': secret}
-
-        self._account_set_update(account_id, {'credentials': credentials}, context='save_app_password')
-
-    def delete_app_password(self, principal_id: str, secret: str):
-        """v0.16 JMAP port: remove an AppPassword credential by secret value."""
+        JSON-Pointer append (`credentials/<next>`) -- do NOT rewrite the whole credentials
+        map: existing entries' secrets are server-set once created, so re-sending them fails
+        with 'Cannot modify server set property credentials/secret'. AppPassword.secret is
+        server-generated, so a client secret uses a Password credential (secret IS settable),
+        matching v0.15 semantics where the `secrets` list held additional login passwords.
+        """
         obj = self._get_account_raw(principal_id)
         account_id = obj['id']
         credentials = obj.get('credentials') or {}
+        indices = [int(key) for key in credentials.keys() if str(key).isdigit()]
+        next_index = (max(indices) + 1) if indices else 0
+        self._account_set_update(
+            account_id,
+            {f'credentials/{next_index}': {'@type': 'Password', 'secret': secret}},
+            context='save_app_password',
+        )
 
-        remaining = {
-            key: value
-            for key, value in credentials.items()
-            if not (isinstance(value, dict) and value.get('secret') == secret)
-        }
-        self._account_set_update(account_id, {'credentials': remaining}, context='delete_app_password')
+    def delete_app_password(self, principal_id: str, secret: str):
+        """v0.16 JMAP port: cannot delete by plaintext secret.
+
+        v0.16 stores credential secrets hashed, so a plaintext secret cannot identify which
+        credential to remove (deletion targets a credentialId). The app's (principal_id,
+        secret) signature provides only the plaintext, so this is a logged no-op; the proper
+        PR should look up the credentialId and set `credentials/<i>` -> null.
+        """
+        logging.warning(
+            'delete_app_password: v0.16 cannot match a credential by plaintext secret '
+            '(needs credentialId); no-op'
+        )
+        return None
 
     # ------------------------------------------------------------------ #
     # Email addresses / aliases (read-modify-write of the aliases map)
@@ -467,47 +473,68 @@ class MailClient:
     def _alias_key(alias: dict):
         return (alias.get('name'), alias.get('domainId'))
 
+    @staticmethod
+    def _aliases_replace_patch(old_count: int, desired: list[dict]) -> dict:
+        """Build a JSON-Pointer PatchObject that replaces the aliases VecMap with `desired`:
+        set aliases/0..n-1, then null out any trailing old indices to trim. (Aliases have no
+        server-set fields, so re-sending existing ones is safe -- unlike credentials.)"""
+        patch = {f'aliases/{i}': alias for i, alias in enumerate(desired)}
+        for j in range(len(desired), old_count):
+            patch[f'aliases/{j}'] = None
+        return patch
+
     def save_email_addresses(self, principal_id: str, emails: str | list[str]):
-        """v0.16 JMAP port: add alias addresses (read-modify-write of the aliases VecMap)."""
+        """v0.16 JMAP port: add alias addresses via JSON-Pointer append (`aliases/<next>`)."""
         if isinstance(emails, str):
             emails = [emails]
         obj = self._get_account_raw(principal_id)
         account_id = obj['id']
-        aliases = self._existing_aliases(obj)
-        have = {self._alias_key(a) for a in aliases}
+        existing = self._existing_aliases(obj)
+        have = {self._alias_key(a) for a in existing}
         primary = obj.get('emailAddress')
+        patch: dict = {}
+        idx = len(existing)
         for email in emails:
             if not email or email == primary:
                 continue
             alias = self._email_to_alias(email)
-            if self._alias_key(alias) not in have:
-                aliases.append(alias)
-                have.add(self._alias_key(alias))
-        self._account_set_update(account_id, {'aliases': self._aliases_to_map(aliases)}, context='save_email_addresses')
+            if self._alias_key(alias) in have:
+                continue
+            patch[f'aliases/{idx}'] = alias
+            have.add(self._alias_key(alias))
+            idx += 1
+        if patch:
+            self._account_set_update(account_id, patch, context='save_email_addresses')
 
     def replace_email_addresses(self, principal_id: str, emails: list[tuple[str, str]]):
-        """v0.16 JMAP port: swap alias addresses (remove old, add new)."""
+        """v0.16 JMAP port: swap alias addresses (remove old, add new) via pointer replace."""
         obj = self._get_account_raw(principal_id)
         account_id = obj['id']
-        aliases = self._existing_aliases(obj)
+        existing = self._existing_aliases(obj)
         primary = obj.get('emailAddress')
+        desired = list(existing)
         for old_email, new_email in emails:
             old_key = self._alias_key(self._email_to_alias(old_email))
-            aliases = [a for a in aliases if self._alias_key(a) != old_key]
+            desired = [a for a in desired if self._alias_key(a) != old_key]
             if new_email and new_email != primary:
-                aliases.append(self._email_to_alias(new_email))
-        self._account_set_update(account_id, {'aliases': self._aliases_to_map(aliases)}, context='replace_email_addresses')
+                desired.append(self._email_to_alias(new_email))
+        self._account_set_update(
+            account_id, self._aliases_replace_patch(len(existing), desired), context='replace_email_addresses'
+        )
 
     def delete_email_addresses(self, principal_id: str, emails: str | list[str]):
-        """v0.16 JMAP port: remove alias addresses by (local part, domainId)."""
+        """v0.16 JMAP port: remove alias addresses by (local part, domainId) via pointer replace."""
         if isinstance(emails, str):
             emails = [emails]
         obj = self._get_account_raw(principal_id)
         account_id = obj['id']
-        aliases = self._existing_aliases(obj)
+        existing = self._existing_aliases(obj)
         targets = {self._alias_key(self._email_to_alias(email)) for email in emails}
-        aliases = [a for a in aliases if self._alias_key(a) not in targets]
-        self._account_set_update(account_id, {'aliases': self._aliases_to_map(aliases)}, context='delete_email_addresses')
+        desired = [a for a in existing if self._alias_key(a) not in targets]
+        if len(desired) != len(existing):
+            self._account_set_update(
+                account_id, self._aliases_replace_patch(len(existing), desired), context='delete_email_addresses'
+            )
 
     # ------------------------------------------------------------------ #
     # Account field updates
@@ -543,8 +570,8 @@ class MailClient:
         camelCase enum name; the disk-bytes key is `maxDiskQuota` (v0.16.13 source).
         """
         account_id = self._resolve_account_id(principal_id)
-        patch = {'quotas': {'maxDiskQuota': quota}}
-        self._account_set_update(account_id, patch, context='update_quota')
+        # JSON-Pointer update: target the map key, don't replace the whole quotas map.
+        self._account_set_update(account_id, {'quotas/maxDiskQuota': quota}, context='update_quota')
 
     def make_api_key(self, principal_id, password):
         """v0.16 JMAP port: BLOCKED.
