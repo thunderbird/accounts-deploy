@@ -1,0 +1,85 @@
+# Kargo freight-verification AnalysisTemplate for Thunderbird Pro Accounts on tb-dev.
+#
+# Kargo verifies freight by running an Argo-Rollouts AnalysisTemplate; this one runs
+# the `@deployment-analysis` Playwright sign-in E2E from thunderbird-accounts
+# (test/e2e, thunderbird-accounts#1146 / #1137) against the freshly-promoted tb-dev
+# deployment. If sign-in breaks, the AnalysisRun fails and the freight is not marked
+# verified.
+#
+# Referenced from the Accounts Kargo Stage:
+#
+#   spec:
+#     verification:
+#       analysisTemplates:
+#         - name: accounts-signin-e2e
+#
+# AnalysisRuns (and the Jobs they spawn) run in the Kargo *Project* namespace, so this
+# lives there — NOT in the `accounts` app namespace. Fill REPLACE_* once the sibling
+# Kargo Project/Warehouse/Stage spec and the E2E image exist.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: accounts-signin-e2e
+  namespace: REPLACE_KARGO_PROJECT_NS
+  labels:
+    app.kubernetes.io/part-of: thunderbird-accounts
+    app.kubernetes.io/component: freight-verification
+    kargo.akuity.io/env: tb-dev
+spec:
+  # One-shot verification: run the Job once; any failure fails the freight check.
+  metrics:
+    - name: signin-e2e
+      count: 1
+      failureLimit: 0
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            # Hard ceiling so a hung sign-in can't wedge a promotion.
+            activeDeadlineSeconds: 900
+            # Keep the finished Job (and its logs) around for a day for triage.
+            ttlSecondsAfterFinished: 86400
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: accounts-signin-e2e
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: signin-e2e
+                    # Playwright image bundling the thunderbird-accounts test/e2e
+                    # suite + browsers + the `deployment-analysis-e2e` npm script.
+                    # Built by Accounts CI (thunderbird-accounts#1146 / #1137).
+                    image: REPLACE_E2E_IMAGE
+                    imagePullPolicy: IfNotPresent
+                    workingDir: /app/test/e2e
+                    command: ["npm", "run", "deployment-analysis-e2e"]
+                    env:
+                      # --- The crux of this template ---------------------------------
+                      # Tell the suite which environment it is targeting. `dev` makes
+                      # the deployment-analysis sign-in test EXERCISE sign-in (the
+                      # beforeEach `ensureWeAreSignedIn`) but SKIP the subscription-
+                      # detail dashboard assertions — the tb-dev test user has no Pro
+                      # subscription yet (subscribe isn't automated on dev). Without
+                      # this the test would hard-fail: navigateToDashboard() polls for
+                      # `/dashboard`, but a subscription-less user is redirected to
+                      # `/subscribe`.
+                      - name: ACCTS_TARGET_ENV
+                        value: "dev"
+                      # Public customer host (internet-facing ALB). Sign-in bounces
+                      # through the public Keycloak (auth.tb-dev.thunderbird.dev), so
+                      # this MUST be the public host, not the in-cluster Service.
+                      - name: ACCTS_HUB_URL
+                        value: "https://accounts.tb-dev.thunderbird.dev"
+                      # Existing Thundermail/Accounts test user on tb-dev. signIn()
+                      # defaults its username/password to these two vars.
+                      - name: ACCTS_OIDC_EMAIL
+                        valueFrom:
+                          secretKeyRef:
+                            name: accounts-e2e-creds
+                            key: ACCTS_OIDC_EMAIL
+                      - name: ACCTS_OIDC_PWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: accounts-e2e-creds
+                            key: ACCTS_OIDC_PWORD
