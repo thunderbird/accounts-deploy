@@ -13,14 +13,22 @@ resources:
 images:
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
-  digest: sha256:6bae681ffad1285475b27d9c82ae2d3e0ab29d6685b690619678aae72659c57f
-# tb-dev HOTPATCH: generate a ConfigMap from the v0.16-ported clients.py. The
-# hashed name means each edit changes the CM name -> rolls the pods (Reloader also
-# covers it). Mounted via subPath in accounts/clients-hotpatch-mount.yaml.
+  digest: sha256:da8e9f99e08f7c4176b44002dd750b3dade9f935bc277b0af6f57d824aa39658
+# tb-dev HOTPATCH: generate a ConfigMap from the v0.16-ported `mail/clients/` PACKAGE
+# (combined arch of PRs #1145 + #1131). The hashed name means each edit changes the CM
+# name -> rolls the pods (Reloader also covers it). Mounted as a full directory over
+# `mail/clients` in accounts/clients-hotpatch-mount.yaml; Python's import machinery
+# prefers the mounted package dir over the image's stale `clients.py` module.
 configMapGenerator:
 - name: accounts-clients-hotpatch
   files:
-  - clients.py=hotpatch/clients.py
+  - __init__.py=hotpatch/clients/__init__.py
+  - jmap_client.py=hotpatch/clients/jmap_client.py
+  - jmap_types.py=hotpatch/clients/jmap_types.py
+  - mail_client_interface.py=hotpatch/clients/mail_client_interface.py
+  - mail_client_jmap.py=hotpatch/clients/mail_client_jmap.py
+  - mail_client_legacy.py=hotpatch/clients/mail_client_legacy.py
+  - stalwart_types.py=hotpatch/clients/stalwart_types.py
 patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
