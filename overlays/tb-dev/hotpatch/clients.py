@@ -42,11 +42,11 @@ JMAP_USING = ['urn:ietf:params:jmap:core', 'urn:stalwart:jmap']
 DKIM_ALGO_JMAP_TYPES = {
     'Rsa': 'Dkim1RsaSha256',
     'RSA': 'Dkim1RsaSha256',
-    'Ed25519': 'Dkim1Ed25519',
-    'ED25519': 'Dkim1Ed25519',
+    'Ed25519': 'Dkim1Ed25519Sha256',
+    'ED25519': 'Dkim1Ed25519Sha256',
     # Accept already-mapped values too, in case config is updated later.
     'Dkim1RsaSha256': 'Dkim1RsaSha256',
-    'Dkim1Ed25519': 'Dkim1Ed25519',
+    'Dkim1Ed25519Sha256': 'Dkim1Ed25519Sha256',
 }
 
 
@@ -370,17 +370,17 @@ class MailClient:
             'roles': {'@type': 'User'},
         }
 
-        # Additional addresses become aliases (aliases is a MAP; value shape unverified).
+        # Additional addresses become aliases (VecMap<EmailAlias> keyed by index).
         extra_emails = [email for email in emails[1:] if email and email != primary_email]
         if extra_emails:
-            create_obj['aliases'] = {email: {} for email in extra_emails}
+            create_obj['aliases'] = self._aliases_to_map([self._email_to_alias(e) for e in extra_emails])
 
         if quota:
-            # quotas is a map; exact StorageQuota key is UNVERIFIED (see notes).
-            create_obj['quotas'] = {'0': {'@type': 'StorageQuota', 'quota': quota}}
+            create_obj['quotas'] = {'maxDiskQuota': quota}
 
         if app_password:
-            create_obj['credentials'] = {'0': {'@type': 'AppPassword', 'secret': app_password}}
+            # Password credential (secret settable); AppPassword.secret is server-generated.
+            create_obj['credentials'] = {'0': {'@type': 'Password', 'secret': app_password}}
 
         responses = self._jmap([['x:Account/set', {'create': {'p0': create_obj}}, 'c0']])
         arguments = self._find_response(responses, 'x:Account/set')
@@ -413,7 +413,10 @@ class MailClient:
 
         indices = [int(key) for key in credentials.keys() if str(key).isdigit()]
         next_index = (max(indices) + 1) if indices else 0
-        credentials[str(next_index)] = {'@type': 'AppPassword', 'secret': secret}
+        # v0.16: AppPassword.secret is server-set (server generates it), so a client-
+        # supplied secret must go in a Password credential (its secret IS settable). This
+        # matches v0.15 semantics where the `secrets` list held additional login passwords.
+        credentials[str(next_index)] = {'@type': 'Password', 'secret': secret}
 
         self._account_set_update(account_id, {'credentials': credentials}, context='save_app_password')
 
@@ -434,47 +437,77 @@ class MailClient:
     # Email addresses / aliases (read-modify-write of the aliases map)
     # ------------------------------------------------------------------ #
 
+    # aliases = VecMap<EmailAlias> -> JSON object keyed by stringified index "0","1",...
+    # EmailAlias = {@type:"EmailAlias", name:<LOCAL PART>, domainId:<id>, enabled:bool}.
+    # `name` is validated as an email local part (a full email is rejected).
+    @staticmethod
+    def _clean_alias(alias: dict) -> dict:
+        out = {'@type': 'EmailAlias', 'name': alias.get('name'), 'enabled': alias.get('enabled', True)}
+        if alias.get('domainId'):
+            out['domainId'] = alias['domainId']
+        if alias.get('description'):
+            out['description'] = alias['description']
+        return out
+
+    def _email_to_alias(self, email: str) -> dict:
+        local, _, domain = email.partition('@')
+        alias = {'@type': 'EmailAlias', 'name': local, 'enabled': True}
+        if domain:
+            alias['domainId'] = self._resolve_domain_id(domain)
+        return alias
+
+    def _existing_aliases(self, obj: dict) -> list[dict]:
+        return [self._clean_alias(a) for a in (obj.get('aliases') or {}).values() if isinstance(a, dict)]
+
+    @staticmethod
+    def _aliases_to_map(aliases: list[dict]) -> dict:
+        return {str(i): a for i, a in enumerate(aliases)}
+
+    @staticmethod
+    def _alias_key(alias: dict):
+        return (alias.get('name'), alias.get('domainId'))
+
     def save_email_addresses(self, principal_id: str, emails: str | list[str]):
-        """v0.16 JMAP port: add alias email addresses (read-modify-write of aliases map)."""
+        """v0.16 JMAP port: add alias addresses (read-modify-write of the aliases VecMap)."""
         if isinstance(emails, str):
             emails = [emails]
-
         obj = self._get_account_raw(principal_id)
         account_id = obj['id']
-        aliases = dict(obj.get('aliases') or {})
+        aliases = self._existing_aliases(obj)
+        have = {self._alias_key(a) for a in aliases}
         primary = obj.get('emailAddress')
         for email in emails:
-            if email and email != primary:
-                aliases[email] = {}
-
-        self._account_set_update(account_id, {'aliases': aliases}, context='save_email_addresses')
+            if not email or email == primary:
+                continue
+            alias = self._email_to_alias(email)
+            if self._alias_key(alias) not in have:
+                aliases.append(alias)
+                have.add(self._alias_key(alias))
+        self._account_set_update(account_id, {'aliases': self._aliases_to_map(aliases)}, context='save_email_addresses')
 
     def replace_email_addresses(self, principal_id: str, emails: list[tuple[str, str]]):
-        """v0.16 JMAP port: swap alias addresses (remove old, add new) in one update."""
+        """v0.16 JMAP port: swap alias addresses (remove old, add new)."""
         obj = self._get_account_raw(principal_id)
         account_id = obj['id']
-        aliases = dict(obj.get('aliases') or {})
+        aliases = self._existing_aliases(obj)
         primary = obj.get('emailAddress')
-
         for old_email, new_email in emails:
-            aliases.pop(old_email, None)
+            old_key = self._alias_key(self._email_to_alias(old_email))
+            aliases = [a for a in aliases if self._alias_key(a) != old_key]
             if new_email and new_email != primary:
-                aliases[new_email] = {}
-
-        self._account_set_update(account_id, {'aliases': aliases}, context='replace_email_addresses')
+                aliases.append(self._email_to_alias(new_email))
+        self._account_set_update(account_id, {'aliases': self._aliases_to_map(aliases)}, context='replace_email_addresses')
 
     def delete_email_addresses(self, principal_id: str, emails: str | list[str]):
-        """v0.16 JMAP port: remove alias email addresses (read-modify-write of aliases map)."""
+        """v0.16 JMAP port: remove alias addresses by (local part, domainId)."""
         if isinstance(emails, str):
             emails = [emails]
-
         obj = self._get_account_raw(principal_id)
         account_id = obj['id']
-        aliases = dict(obj.get('aliases') or {})
-        for email in emails:
-            aliases.pop(email, None)
-
-        self._account_set_update(account_id, {'aliases': aliases}, context='delete_email_addresses')
+        aliases = self._existing_aliases(obj)
+        targets = {self._alias_key(self._email_to_alias(email)) for email in emails}
+        aliases = [a for a in aliases if self._alias_key(a) not in targets]
+        self._account_set_update(account_id, {'aliases': self._aliases_to_map(aliases)}, context='delete_email_addresses')
 
     # ------------------------------------------------------------------ #
     # Account field updates
@@ -504,13 +537,13 @@ class MailClient:
         self._account_set_update(account_id, patch, context='update_individual')
 
     def update_quota(self, principal_id: str, quota: int):
-        """v0.16 JMAP port: update the account storage quota via a PatchObject.
+        """v0.16 JMAP port: update the account storage quota.
 
-        NOTE: the exact `quotas` map key/shape (StorageQuota enum) is UNVERIFIED against
-        v0.16.13 (the port notes flag it). Probe live and adjust if the set is rejected.
+        `quotas` is a VecMap<StorageQuota,u64> serialized as an object keyed by the
+        camelCase enum name; the disk-bytes key is `maxDiskQuota` (v0.16.13 source).
         """
         account_id = self._resolve_account_id(principal_id)
-        patch = {'quotas': {'0': {'@type': 'StorageQuota', 'quota': quota}}}
+        patch = {'quotas': {'maxDiskQuota': quota}}
         self._account_set_update(account_id, patch, context='update_quota')
 
     def make_api_key(self, principal_id, password):
@@ -597,7 +630,7 @@ class MailClient:
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import ed25519, rsa
 
-        if jmap_type == 'Dkim1Ed25519':
+        if jmap_type == 'Dkim1Ed25519Sha256':
             private_key = ed25519.Ed25519PrivateKey.generate()
         else:
             private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -636,7 +669,8 @@ class MailClient:
                 '@type': jmap_type,
                 'domainId': domain_id,
                 'selector': selector,
-                'secret': secret,
+                # privateKey is a SecretText wrapper, not a bare `secret` field.
+                'privateKey': {'@type': 'Text', 'secret': secret},
             }
             if settings.STALWART_DKIM_STAGE_MANAGEMENT_ENABLED:
                 create_obj['stage'] = stage.value
