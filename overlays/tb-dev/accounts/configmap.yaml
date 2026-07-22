@@ -33,6 +33,13 @@ data:
   # POSTs still need their origin trusted alongside the public customer origin.
   CSRF_TRUSTED_ORIGINS: "https://accounts.tb-dev.thunderbird.dev,https://accounts-tb-dev.tail2726a2.ts.net"
 
+  # Downstream Thunderbird Pro service integration (appointment on EKS, #701).
+  # The tbpro dashboard "Your Services" card links out to the Appointment app.
+  TB_PRO_APPOINTMENT_URL: "https://appointment.tb-dev.thunderbird.dev"
+  # Allow the Appointment SPA origin for any cross-origin browser call into the
+  # accounts API (CORS_ALLOWED_ORIGINS replaces, so list every allowed origin).
+  CORS_ALLOWED_ORIGINS: "https://appointment.tb-dev.thunderbird.dev"
+
   # Accounts Postgres (net-new ACK RDS, #597). DATABASE_HOST/PORT come from the
   # accounts-db-endpoint ConfigMap (ACK FieldExport), not from here.
   DATABASE_NAME: "accounts"
