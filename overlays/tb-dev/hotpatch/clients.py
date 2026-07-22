@@ -198,13 +198,13 @@ class MailClient:
     # ------------------------------------------------------------------ #
 
     def _resolve_account_id(self, name: str) -> str:
-        """v0.16 JMAP port: resolve an account login name to its numeric JMAP id."""
-        responses = self._jmap([['x:Account/query', {'filter': {'name': name}}, 'c0']])
-        arguments = self._find_response(responses, 'x:Account/query')
-        ids = (arguments or {}).get('ids') or []
-        if not ids:
-            raise AccountNotFoundError(name)
-        return ids[0]
+        """v0.16 JMAP port: resolve an account login name OR full email to its numeric id.
+
+        x:Account/query only filters by `name` (the login local part); a full-email value
+        yields `unsupportedFilter: Filter on property name`. Delegate to _get_account_raw,
+        which queries by local part and disambiguates by domainId for emails.
+        """
+        return self._get_account_raw(name)['id']
 
     def _resolve_domain_id(self, name: str) -> str:
         """v0.16 JMAP port: resolve a domain name to its numeric JMAP id."""
@@ -316,13 +316,21 @@ class MailClient:
     # ------------------------------------------------------------------ #
 
     def _get_account_raw(self, principal_id: str) -> dict:
-        """v0.16 JMAP port: batched query->get for an account by login name.
+        """v0.16 JMAP port: batched query->get for an account by login name OR full email.
 
-        Raises AccountNotFoundError when the login doesn't exist.
+        x:Account/query only filters by `name` (login local part) -- a full email is an
+        invalid `name` value. So for an email we query by the local part and disambiguate
+        by domainId; for a bare login we query by name directly.
+        Raises AccountNotFoundError when no matching account exists.
         """
+        if '@' in principal_id:
+            local, _, domain = principal_id.partition('@')
+            domain_id = self._resolve_domain_id(domain)
+        else:
+            local, domain_id = principal_id, None
         responses = self._jmap(
             [
-                ['x:Account/query', {'filter': {'name': principal_id}}, 'c0'],
+                ['x:Account/query', {'filter': {'name': local}}, 'c0'],
                 [
                     'x:Account/get',
                     {'#ids': {'resultOf': 'c0', 'name': 'x:Account/query', 'path': '/ids'}},
@@ -332,6 +340,8 @@ class MailClient:
         )
         arguments = self._find_response(responses, 'x:Account/get')
         account_list = (arguments or {}).get('list') or []
+        if domain_id is not None:
+            account_list = [a for a in account_list if a.get('domainId') == domain_id]
         if not account_list:
             raise AccountNotFoundError(principal_id)
         return account_list[0]
