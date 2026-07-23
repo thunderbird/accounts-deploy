@@ -127,13 +127,16 @@ patches:
     - op: replace
       path: /spec/securityGroupIDs/0
       value: sg-0be1a8015ac9b2535
-# ---- tb-dev DB cutover: ACK RDS -> Neon branch (connection string) ----
+# ---- tb-dev DB cutover: ACK RDS -> Neon branch ----
 # Disable the RDS DATABASE_HOST FieldExport so it no longer overwrites the endpoint
 # ConfigMap with the RDS address, then set DATABASE_HOST statically to the Neon tb-dev
 # branch endpoint (pooler; the app is Neon-pooler-safe -- DISABLE_SERVER_SIDE_CURSORS).
-# Reached via a plain public connection string over TLS (accounts pods are egress-all,
-# NAT out), no PrivateLink. The ACK RDS resources are left in place for now (removed in
-# a follow-up once Neon is verified). Password (neondb_owner) is in mzla/tb-dev/accounts-db.
+# Reached over Neon PrivateLink: the host resolves to the shared Neon interface
+# endpoints via private DNS (not the public internet). The accounts Neon endpoint SG
+# that gates this (admitting the accounts pod SG on 5432) is added in
+# platform-infrastructure#797 and must be applied + attached before this deploys.
+# The ACK RDS resources are left in place for now (removed in a follow-up once Neon is
+# verified). Password (neondb_owner) is in mzla/tb-dev/accounts-db.
 - target:
     group: services.k8s.aws
     version: v1alpha1
