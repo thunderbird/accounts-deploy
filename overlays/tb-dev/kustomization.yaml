@@ -13,7 +13,7 @@ resources:
 images:
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
-  digest: sha256:c5b8b7ffbd928681cae3080d70b6d8472dba1a1b03cc4025c4dd69f8dba5f30f
+  digest: sha256:64735ee50a61b85efc800844046b3b1ae68d444a140328588bd0370c8330da72
 # tb-dev HOTPATCH: generate a ConfigMap from the v0.16-ported `mail/clients/` PACKAGE
 # (combined arch of PRs #1145 + #1131). The hashed name means each edit changes the CM
 # name -> rolls the pods (Reloader also covers it). Mounted as a full directory over
