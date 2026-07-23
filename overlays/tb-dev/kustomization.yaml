@@ -127,3 +127,30 @@ patches:
     - op: replace
       path: /spec/securityGroupIDs/0
       value: sg-0be1a8015ac9b2535
+# ---- tb-dev DB cutover: ACK RDS -> Neon branch (connection string) ----
+# Disable the RDS DATABASE_HOST FieldExport so it no longer overwrites the endpoint
+# ConfigMap with the RDS address, then set DATABASE_HOST statically to the Neon tb-dev
+# branch endpoint (pooler; the app is Neon-pooler-safe -- DISABLE_SERVER_SIDE_CURSORS).
+# Reached via a plain public connection string over TLS (accounts pods are egress-all,
+# NAT out), no PrivateLink. The ACK RDS resources are left in place for now (removed in
+# a follow-up once Neon is verified). Password (neondb_owner) is in mzla/tb-dev/accounts-db.
+- target:
+    group: services.k8s.aws
+    version: v1alpha1
+    kind: FieldExport
+    name: accounts-db-host
+  patch: |-
+    $patch: delete
+    apiVersion: services.k8s.aws/v1alpha1
+    kind: FieldExport
+    metadata:
+      name: accounts-db-host
+      namespace: accounts
+- target:
+    version: v1
+    kind: ConfigMap
+    name: accounts-db-endpoint
+  patch: |-
+    - op: add
+      path: /data/DATABASE_HOST
+      value: ep-muddy-sky-a2tslt0c-pooler.eu-central-1.aws.neon.tech
