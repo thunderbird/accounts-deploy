@@ -40,10 +40,14 @@ data:
   # accounts API (CORS_ALLOWED_ORIGINS replaces, so list every allowed origin).
   CORS_ALLOWED_ORIGINS: "https://appointment.tb-dev.thunderbird.dev"
 
-  # Accounts Postgres (net-new ACK RDS, #597). DATABASE_HOST/PORT come from the
-  # accounts-db-endpoint ConfigMap (ACK FieldExport), not from here.
-  DATABASE_NAME: "accounts"
-  DATABASE_USER: "accounts"
+  # Accounts Postgres — Neon tb-dev branch (cloned from accounts stage), reached over
+  # Neon PrivateLink (the host resolves to the shared Neon interface endpoints via
+  # private DNS), NOT the ACK RDS. DATABASE_HOST/PORT come from the accounts-db-endpoint
+  # ConfigMap (the RDS FieldExport is disabled in this overlay and the host set
+  # statically to the Neon endpoint). The branch's db/role are the Neon defaults, not
+  # `accounts`. Endpoint SG gating this: platform-infrastructure#797.
+  DATABASE_NAME: "neondb"
+  DATABASE_USER: "neondb_owner"
 
   # OIDC against the tbpro realm on the dev Customer Auth Keycloak (#599).
   # Front-channel (browser redirects) uses the PUBLIC auth host, which is also the
