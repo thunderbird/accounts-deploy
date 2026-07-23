@@ -21,6 +21,20 @@ Runs the `@deployment-analysis` Playwright sign-in test from
 (`npm run deployment-analysis-e2e`) against the just-promoted tb-dev deployment. It
 exercises OIDC sign-in end to end; if sign-in breaks, the freight is not verified.
 
+**How it runs (approach b).** A stock Playwright image
+(`mcr.microsoft.com/playwright:v1.59.1-noble`, tag pinned to the repo's
+`@playwright/test`) checks out `test/e2e` at run time and runs the suite directly —
+`git clone` → `npm ci` → `npx playwright install firefox` → `npm run
+deployment-analysis-e2e` — mirroring how Accounts CI runs it (`validate.yml`
+`run-e2e-tests-local`). No bespoke E2E image to build/publish. The repo is public, so
+the clone needs no credentials; `ACCTS_E2E_REF` (default `main`) selects the ref.
+
+**Follow-up (c), noted for later.** Instead of running Playwright in-cluster, have Kargo
+trigger the existing GitHub Actions E2E workflow (an `AnalysisTemplate` `web`/webhook
+provider that dispatches the workflow and polls its status). That reuses CI's exact
+runner setup + secrets and needs no in-cluster browser/egress. Revisit if the
+in-cluster clone/install is slow or flaky, or if CI should own the run.
+
 **`ACCTS_TARGET_ENV=dev` is deliberate.** On dev the test user has no Pro subscription
 (subscribe isn't automated yet), so the suite's `dev` guard skips the subscription-
 detail dashboard assertions while still exercising sign-in via the test's `beforeEach`.
@@ -36,13 +50,17 @@ spec:
       - name: accounts-signin-e2e
 ```
 
-### Before this is deploy-ready (`REPLACE_*`)
+### Before this is deploy-ready
 
-- **`REPLACE_KARGO_PROJECT_NS`** — the Kargo Project namespace for Accounts (defined by
-  the sibling Project/Warehouse/Stage spec, not yet in this repo).
-- **`REPLACE_E2E_IMAGE`** — a Playwright image bundling `test/e2e` + browsers + the
-  `deployment-analysis-e2e` script, built by Accounts CI
-  ([thunderbird-accounts#1137](https://github.com/thunderbird/thunderbird-accounts/issues/1137)).
 - **Secrets Manager** — create `mzla/tb-dev/accounts-e2e` with `ACCTS_OIDC_EMAIL` +
-  `ACCTS_OIDC_PWORD` for an existing tb-dev test user; ensure the Kargo cluster has the
-  `aws-secrets-manager` ClusterSecretStore + IRSA read access to that path.
+  `ACCTS_OIDC_PWORD` for an existing tb-dev test user; ensure the cluster running the
+  Kargo AnalysisRuns has the `aws-secrets-manager` ClusterSecretStore + IRSA read access
+  to that path.
+- **Stage wiring** — add the `verification.analysisTemplates` block above to the
+  `tb-accounts`/`tb-dev` Stage (its `spec.verification` is currently empty).
+- **Egress** — the AnalysisRun Job needs outbound access to GitHub + npm (clone/install)
+  and to `accounts.tb-dev.thunderbird.dev` + `auth.tb-dev.thunderbird.dev` (the sign-in
+  flow). All public hosts.
+
+Namespace (`tb-accounts`) is now filled in; the manifests pass `kubectl apply
+--dry-run=server`.
