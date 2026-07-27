@@ -6,30 +6,6 @@
 apiVersion: ec2.services.k8s.aws/v1alpha1
 kind: SecurityGroup
 metadata:
-  name: accounts-rds
-  namespace: accounts
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
-spec:
-  name: accounts-rds
-  description: "Accounts RDS Postgres - access from accounts pods"
-  vpcID: REPLACE_VPC_ID
-  ingressRules:
-    - fromPort: 5432
-      toPort: 5432
-      ipProtocol: tcp
-      userIDGroupPairs:
-        - description: PostgreSQL from accounts pods
-          groupID: REPLACE_ACCOUNTS_POD_SG
-  tags:
-    - key: Service
-      value: thunderbird-pro-accounts
-    - key: ManagedBy
-      value: ack
----
-apiVersion: ec2.services.k8s.aws/v1alpha1
-kind: SecurityGroup
-metadata:
   name: accounts-redis
   namespace: accounts
   annotations:
