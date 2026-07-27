@@ -32,28 +32,10 @@ metadata:
   name: accounts-db-endpoint
   namespace: accounts
 data:
-  # DATABASE_HOST is intentionally NOT set here -- it is written by the accounts-db-host
-  # FieldExport below. Committing a value would let an Argo CD sync revert the live RDS
-  # endpoint (see header). DATABASE_PORT is a static constant (non-clobbering).
+  # DATABASE_HOST is set per overlay (a static Neon branch endpoint), NOT here and no
+  # longer by a FieldExport -- the RDS accounts-db-host FieldExport was removed with the
+  # RDS itself. DATABASE_PORT is a static constant shared by both RDS and Neon.
   DATABASE_PORT: "5432"
----
-apiVersion: services.k8s.aws/v1alpha1
-kind: FieldExport
-metadata:
-  name: accounts-db-host
-  namespace: accounts
-spec:
-  from:
-    path: ".status.endpoint.address"
-    resource:
-      group: rds.services.k8s.aws
-      kind: DBInstance
-      name: accounts-db
-  to:
-    name: accounts-db-endpoint
-    namespace: accounts
-    kind: configmap
-    key: DATABASE_HOST
 ---
 # accounts-redis-endpoint: created empty so the FieldExport (patch-only) has a target.
 # REDIS_PRIMARY_ENDPOINT is written solely by the FieldExport below -- never seed a value.
