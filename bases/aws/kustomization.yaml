@@ -9,6 +9,5 @@ namespace: accounts
 resources:
   - security-groups.yaml
   - subnet-groups.yaml
-  - db-instance.yaml
   - elasticache.yaml
   - field-exports.yaml
