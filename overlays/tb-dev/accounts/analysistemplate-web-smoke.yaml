@@ -1,0 +1,105 @@
+# tb-dev: in-cluster smoke for the Argo Rollouts PRE-promotion gate on accounts-web.
+#
+# WHY THIS IS NOT THE SIGN-IN E2E. The obvious move is to reuse `accounts-signin-e2e`
+# (the Playwright OIDC test added for Kargo freight verification) as the Rollout's
+# prePromotionAnalysis. That would be WRONG, and would pass while green was broken:
+#
+#   prePromotionAnalysis must test the PREVIEW (green) pods before traffic shifts. The
+#   sign-in test drives a browser through the PUBLIC host, because the OIDC redirect
+#   flow bounces via public Keycloak and cannot be pointed at a ClusterIP. The public
+#   host resolves to the ALB, and the ALB forwards to the ACTIVE (blue) Service. So the
+#   sign-in test exercises the OLD pods no matter which colour is under test.
+#
+# The two gates are therefore complementary, not redundant, and both should exist:
+#   - THIS template, as Rollout prePromotionAnalysis: reaches green directly, in-cluster,
+#     before any traffic moves. Catches "green does not boot / cannot reach its DB".
+#   - accounts-signin-e2e, as Kargo Stage verification: runs through the real edge after
+#     promotion, and is the only thing that exercises the OIDC round-trip end to end.
+# Mirrors appointment-backend-smoke, which is the working precedent on this cluster.
+#
+# PARAMETERISED ON THE TARGET SERVICE so the same template serves both strategies:
+#   blue-green -> passed the previewService by strategy.blueGreen.prePromotionAnalysis
+#   canary     -> passed the canaryService by strategy.canary.steps[].analysis
+# Never hardcode `accounts-preview` here; that is what makes the later canary switch a
+# strategy-block swap rather than a rewrite.
+#
+# WHAT THIS DOES *NOT* COVER, stated plainly so it is not mistaken for a real gate:
+#   - It asserts GET / returns < 500. Django's `/` touches the DB for session/auth, so a
+#     dead DB or a failed migration surfaces; a broken mail client does not.
+#   - It does NOT probe /health. On tb-dev /health is a deep composite (DB + Keycloak
+#     admin API + Stalwart mgmt API) that currently 500s because Stalwart is unwired
+#     (platform-infrastructure#597/#146) -- which is also why the tb-dev overlay replaces
+#     the /health readiness probe with a bare TCP check. Gating on /health here would fail
+#     every rollout for a reason unrelated to the change under test. Once Stalwart is
+#     wired, or /health is split into shallow-liveness plus deep-readiness, switch this to
+#     /health and delete this paragraph -- until then this gate is genuinely shallow and
+#     "green" from it means only "it boots and talks to Postgres".
+#   - Because tb-dev readiness is TCP-only, Rollout `Healthy` on this cluster means little
+#     independently of this analysis. prod keeps the /health readiness from bases/, so
+#     dev and prod do NOT agree on what Healthy means; a dev rehearsal does not transfer.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: accounts-web-smoke
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+spec:
+  args:
+    # Service name to probe. Supplied by the Rollout; see the header for which field
+    # provides it under each strategy.
+    - name: target-service
+  metrics:
+    - name: web-smoke
+      count: 1
+      failureLimit: 0
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            # Hard ceiling so a hung probe cannot wedge a rollout.
+            activeDeadlineSeconds: 120
+            ttlSecondsAfterFinished: 86400
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: accounts-web-smoke
+              spec:
+                restartPolicy: Never
+                automountServiceAccountToken: false
+                nodeSelector:
+                  kubernetes.io/arch: arm64
+                  role: general
+                containers:
+                  - name: smoke
+                    image: curlimages/curl:8.11.1
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        set -eu
+                        BASE="http://{{args.target-service}}.accounts.svc.cluster.local:80"
+                        echo "smoke: GET $BASE/ (expect <500; exercises DB via session/auth)"
+                        code=$(curl -sS -m 10 -o /dev/null -w '%{http_code}' -L "$BASE/")
+                        echo "GET / -> $code"
+                        case "$code" in
+                          5*|000) echo "FAIL: $code from $BASE/"; exit 1 ;;
+                        esac
+                        echo "smoke: PASS"
+                    resources:
+                      requests:
+                        cpu: 50m
+                        memory: 64Mi
+                      limits:
+                        cpu: 250m
+                        memory: 128Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop:
+                          - ALL
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault

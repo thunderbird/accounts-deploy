@@ -1,0 +1,49 @@
+# tb-dev: second Service for Argo Rollouts, landed AHEAD of the strategy flip.
+#
+# Deliberately inert today. With no Rollout in the namespace its selector matches the
+# same pods as `accounts`, so it is a harmless duplicate ClusterIP. It exists now so the
+# eventual strategy flip is a single change to the workload manifest instead of a
+# simultaneous Service + Rollout + ArgoCD-config edit across two repos.
+#
+# ONE Service serves BOTH strategies, which is the point:
+#   blue-green -> strategy.blueGreen.previewService: accounts-preview
+#                 (with strategy.blueGreen.activeService: accounts)
+#   canary     -> strategy.canary.canaryService: accounts-preview
+#                 (with strategy.canary.stableService: accounts)
+# So moving blue-green -> canary later is a strategy-block swap plus a trafficRouting
+# stanza, not a re-architecture.
+#
+# Canary via ALB IS available on this cluster, contrary to the "canary rejected -- ALB,
+# no traffic router" line in the accounts pipeline design doc: the accounts-public
+# Ingress is ingressClassName=alb with target-type=ip and aws-load-balancer-controller
+# runs here, which is exactly Argo Rollouts' supported ALB traffic-router configuration
+# (strategy.canary.trafficRouting.alb). target-type=ip is a hard requirement for it and
+# is already set.
+#
+# Rollouts will inject `rollouts-pod-template-hash` into .spec.selector on BOTH this
+# Service and `accounts` once a Rollout owns them. ArgoCD selfHeal would fight that, so
+# platform-infrastructure argocd/tb-dev/apps/accounts.yaml carries an ignoreDifferences
+# entry scoped to the argo-rollouts field manager for both Services. That must be in
+# place before the flip, or traffic can snap back to the wrong colour mid-rollout.
+#
+# NOT added to bases/: prod has no Rollouts controller wired for accounts yet, and the
+# design is explicit that the conversion happens as an overlay-scoped change rather than
+# by flipping the base for every environment at once.
+apiVersion: v1
+kind: Service
+metadata:
+  name: accounts-preview
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
