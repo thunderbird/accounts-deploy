@@ -1,0 +1,16 @@
+# tb-dev: remove the bases/ accounts-web Deployment. It is replaced, for this overlay
+# only, by accounts/web-rollout.yaml (an Argo Rollouts blue-green Rollout).
+#
+# $patch: delete removes the resource from the rendered output. bases/accounts is left
+# untouched, so tb-prod keeps the plain Deployment until its own conversion phase --
+# design v4 §B.1 requires the conversion be overlay-scoped rather than a bases/ flip.
+#
+# ArgoCD then sees a Deployment disappear and a Rollout appear in one sync. That is a
+# KIND change, and the ordering is handled by PruneLast=true on the Rollout (see its
+# header) so the active Service is never left without endpoints.
+$patch: delete
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts-web
+  namespace: accounts

@@ -1,0 +1,181 @@
+# tb-dev: accounts-web as an Argo Rollouts blue-green Rollout.
+#
+# Replaces the bases/ Deployment for THIS OVERLAY ONLY (deleted via
+# accounts/delete-web-deployment.yaml). Design v4 §B.1 is explicit that the conversion
+# is overlay-scoped and bases/accounts is never flipped, because prod's conversion is a
+# separate phase -- this differs from appointment-deploy, which converted in bases/
+# because every one of its clusters was ready at once.
+#
+# Because the Rollout lives only here, the tb-dev overlay's Deployment patches
+# (web-deployment.yaml, and the accounts-web stanza of clients-hotpatch-mount.yaml) no
+# longer have a target and would fail the kustomize build with "no matches for Id". Both
+# were folded INTO this manifest rather than re-targeted, so there is exactly one place
+# to read tb-dev's web config. The celery/flower hotpatch stanzas are untouched.
+#
+# HOW THE GATE WORKS: a new revision spins up a PREVIEW ReplicaSet behind
+# accounts-preview, prePromotionAnalysis runs accounts-web-smoke against it, and only a
+# passing AnalysisRun flips accounts (the active Service) to the new pods. A failing
+# smoke leaves active on the old pods, the Rollout never goes Healthy, and the Kargo
+# tb-dev Stage's argocd-wait fails the promotion closed.
+#
+# *** DO NOT MERGE THIS AHEAD OF THE TWO APP-SIDE FIXES. *** Blue-green here is
+# currently WORSE than the RollingUpdate it replaces:
+#
+#   1. MIGRATIONS RUN ON CONTAINER BOOT. The default entrypoint runs `manage.py migrate`
+#      before Uvicorn starts (bases/accounts/web-deployment.yaml says so). With a shared
+#      DB the green ReplicaSet migrates BEFORE prePromotionAnalysis runs, blue keeps
+#      serving against the mutated schema, and aborting scales green down WITHOUT
+#      rolling back the schema. Abort is not rollback. A non-additive migration breaks
+#      blue the moment green boots -- so this wraps a verify-then-promote ritual around a
+#      step that already irreversibly mutated shared state. Fix is design v4 §B.6/B.9:
+#      expand/contract plus migrations as a discrete pre-promotion Job. That is an
+#      app/entrypoint change, not a manifest change.
+#   2. READINESS IS TCP-ONLY on tb-dev (see the probe below), so "Rollout Healthy" means
+#      "the port is open". autoPromotionEnabled keys off Healthy. prod keeps the /health
+#      readiness from bases/, so dev and prod do NOT agree on what Healthy means and a
+#      dev rehearsal of this does not transfer to prod.
+#
+# FIRST-REVISION GAP (carried over from appointment-deploy's cutover, same behaviour):
+# on the FIRST revision -- this Deployment->Rollout cutover -- Argo Rollouts has no prior
+# stable ReplicaSet, so it SKIPS prePromotionAnalysis and promotes immediately. That one
+# revision is UNGATED. Verify the cutover digest is known-good before merging; the
+# "a bad build cannot reach users" guarantee only holds from revision 2 onward.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: accounts-web
+  namespace: accounts
+  annotations:
+    # Reloader also supports Rollouts, so this carries over from the Deployment.
+    reloader.stakater.com/auto: "true"
+    # The Deployment->Rollout cutover is a KIND CHANGE: without this ArgoCD prunes the
+    # old Deployment in the SAME sync that creates the Rollout, before the new pods are
+    # Ready -> the active Service loses all endpoints -> a web outage window. PruneLast
+    # defers the prune until the Rollout is applied and healthy.
+    argocd.argoproj.io/sync-options: PruneLast=true
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+spec:
+  # tb-dev runs ONE web replica: migrations run on web boot, so a second replica races
+  # the first through `manage.py migrate`. Folded in from the deleted web-deployment.yaml
+  # patch. NOTE this makes blue-green single-pod per colour -- fine for dev, and another
+  # reason not to read prod behaviour from this.
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: accounts
+      app.kubernetes.io/component: web
+  strategy:
+    blueGreen:
+      activeService: accounts
+      previewService: accounts-preview
+      # Auto-flip to the new pods IFF prePromotionAnalysis succeeds; the analysis is the
+      # sole gate, no manual promotion on tb-dev. Design v4 D.5 lists this as a
+      # never-touch invariant, because Kargo infers the verdict from "Rollout Healthy"
+      # and that equivalence only holds while auto-promotion is gated on the analysis.
+      autoPromotionEnabled: true
+      # Pin the controller default explicitly, or ServerSideApply + selfHeal render the
+      # Rollout perpetually OutOfSync against the defaulted value. Also keeps the old
+      # ReplicaSet warm briefly for a fast flip back.
+      scaleDownDelaySeconds: 30
+      prePromotionAnalysis:
+        templates:
+          - templateName: accounts-web-smoke
+        args:
+          # Feeds {{args.target-service}} in the template. Named target-service rather
+          # than preview-service precisely so the same template can be handed the
+          # canaryService later without renaming anything.
+          - name: target-service
+            value: accounts-preview
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: accounts
+        app.kubernetes.io/component: web
+    spec:
+      securityContext:
+        # The thunderbird-accounts image currently runs as root (no USER in its
+        # Dockerfile), so runAsNonRoot is not enforced. Unchanged from bases/.
+        seccompProfile:
+          type: RuntimeDefault
+      nodeSelector:
+        role: general
+        kubernetes.io/arch: arm64
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: accounts
+              app.kubernetes.io/component: web
+      volumes:
+        # tb-dev HOTPATCH, folded in from clients-hotpatch-mount.yaml (whose accounts-web
+        # stanza was removed, since a Deployment/accounts-web no longer exists here).
+        - name: clients-hotpatch
+          configMap:
+            name: accounts-clients-hotpatch
+      containers:
+        - name: accounts
+          # Match key for the overlay `images:` transform, which Kargo rewrites to the
+          # promoted digest. Verified working against a Rollout by appointment-deploy.
+          image: REPLACE_ACCOUNTS_ECR/accounts:REPLACE_IMAGE_TAG
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 8087
+              protocol: TCP
+          env:
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: accounts-db
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: accounts-config
+            - secretRef:
+                name: accounts-secrets
+            - configMapRef:
+                name: accounts-db-endpoint
+          volumeMounts:
+            - name: clients-hotpatch
+              mountPath: /app/src/thunderbird_accounts/mail/clients
+              readOnly: true
+          startupProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 15
+            failureThreshold: 3
+          # tb-dev: TCP, not GET /health. Folded in from the deleted web-deployment.yaml
+          # patch. /health is a deep composite (DB + Keycloak admin API + Stalwart mgmt
+          # API) that 500s while Stalwart is unwired (platform-infrastructure#597/#146),
+          # so the pod would never join the Service endpoints. This is blocker (2) in the
+          # header: it is why Rollout Healthy is a weak signal here. Restore the /health
+          # readiness from bases/ the moment Stalwart is wired, or split /health into
+          # shallow-liveness plus deep-readiness.
+          readinessProbe:
+            httpGet: null
+            tcpSocket:
+              port: http
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi

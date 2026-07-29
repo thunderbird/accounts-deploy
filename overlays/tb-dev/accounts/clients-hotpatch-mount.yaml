@@ -9,26 +9,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: accounts-web
-  namespace: accounts
-spec:
-  template:
-    spec:
-      volumes:
-        - name: clients-hotpatch
-          configMap:
-            name: accounts-clients-hotpatch
-      containers:
-        - name: accounts
-          volumeMounts:
-            - name: clients-hotpatch
-              mountPath: /app/src/thunderbird_accounts/mail/clients.py
-              subPath: clients.py
-              readOnly: true
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: accounts-celery
   namespace: accounts
 spec:

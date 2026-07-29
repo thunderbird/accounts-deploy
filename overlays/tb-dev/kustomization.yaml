@@ -18,6 +18,9 @@ resources:
 # prePromotionAnalysis now and canary steps[].analysis later. See each file's header.
 - accounts/preview-service.yaml
 - accounts/analysistemplate-web-smoke.yaml
+# accounts-web as a blue-green Rollout, replacing the bases/ Deployment for THIS
+# overlay only (the Deployment is removed by the $patch: delete below).
+- accounts/web-rollout.yaml
 images:
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
@@ -32,8 +35,10 @@ configMapGenerator:
 patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
-# dev runs a single web replica (migrations run on web boot; avoid concurrency).
-- path: accounts/web-deployment.yaml
+# Remove the bases/ accounts-web Deployment; replaced by accounts/web-rollout.yaml.
+# The former web-deployment.yaml patch (replicas: 1 + TCP readiness) is folded into
+# the Rollout, since a patch targeting Deployment/accounts-web would no longer match.
+- path: accounts/delete-web-deployment.yaml
 # tb-dev HOTPATCH: mount the v0.16-ported clients.py over the image copy on all
 # three deployments (see accounts/clients-hotpatch-mount.yaml).
 - path: accounts/clients-hotpatch-mount.yaml
