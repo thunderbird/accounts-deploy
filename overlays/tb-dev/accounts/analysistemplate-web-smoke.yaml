@@ -23,8 +23,8 @@
 # shape of that file -- its Job pod could not start at all. Everything else here
 # DIVERGES from appointment deliberately, because Django's `/` is not a health
 # endpoint: appointment asserts a strict `GET / -> 200`; we assert an explicit public
-# route plus the anonymous-redirect contract, and we never follow a redirect. This
-# template is NOT a mirror of appointment's assertions and must not be described as one.
+# route and its rendered body, and we never follow a redirect. This template is NOT a
+# mirror of appointment's assertions and must not be described as one.
 #
 # PARAMETERISED ON THE TARGET SERVICE so the same template serves both strategies:
 #   blue-green -> passed the previewService by strategy.blueGreen.prePromotionAnalysis
@@ -39,8 +39,9 @@
 # NAT-gateway round-trip away from the pod under test -- so the gate would report a
 # cheerful 200 while green served nothing but a redirect. Verified 2026-08-10 against
 # the tb-dev host: `curl -L /` returns 200 from the Keycloak auth endpoint. Redirects
-# are therefore never followed, and the one redirect we do inspect is asserted to be
-# the root-relative `/login/`, which is structurally incapable of leaving the cluster.
+# are therefore never followed. As of 2026-08-10 no redirect is inspected at all -- the
+# `GET /` assertion was removed because in-cluster it returns 400, not the 302 the public
+# ALB gives; see the note at that point in the script.
 # `--noproxy '*'` is belt-and-braces against a future injected `*_proxy` env.
 #
 # WHAT THIS GATE ASSERTS (all fail-closed; count: 1 / failureLimit: 0 / backoffLimit: 0,
@@ -53,11 +54,9 @@
 #      manifest raises -> handler500 -> 500 -> gate fails.
 #   2. The /sign-up body carries `window._page` and `id="app"`, proving the Django/Vue
 #      shell actually rendered rather than an ALB error page or a proxy interstitial.
-#   3. GET / -> exactly 302 with `Location: /login/`, unfollowed. That is the
-#      anonymous-auth contract: urls.py registers the `login` route ONLY under
-#      `if settings.AUTH_SCHEME == 'oidc'`, so an AUTH_SCHEME regression makes
-#      reverse('login') raise NoReverseMatch and this returns 500 instead of 302.
-#
+#   (There is deliberately NO `GET /` assertion -- in-cluster it returns 400, not
+#   the 302 the public ALB gives. See the long note at that point in the script.)
+
 # WHAT THIS DOES *NOT* COVER, stated plainly so it is not mistaken for a real gate:
 #   - REDIS IS NOT ASSERTED. Nothing on these two routes touches the cache: sessions
 #     are not read for an anonymous request (no cookie -> SessionStore.session_key is
@@ -87,7 +86,7 @@
 #     re-probe before substituting a different path.
 #   - IT DOES NOT PORT TO tb-prod AS WRITTEN. It relies on tb-dev's ALLOWED_HOSTS="*".
 #     Prod pins ALLOWED_HOSTS and SetHostIPInAllowedHostsMiddleware adds only the pod's
-#     own IP, not the Service DNS name, so all three checks would return 400
+#     own IP, not the Service DNS name, so both checks would return 400
 #     DisallowedHost. The remedy is one flag: `-H "Host: <pinned public host>"`.
 #   - Because tb-dev readiness is TCP-only, Rollout `Healthy` on this cluster means
 #     little independently of this analysis. prod keeps the /health readiness from
@@ -99,8 +98,11 @@
 # `accounts` SecurityGroupPolicy (podSelector `app.kubernetes.io/name: accounts`) and
 # under POD_SECURITY_GROUP_ENFORCING_MODE=strict it uses the node SG. The web pod SG
 # sg-0dba8adea7684454f must therefore admit TCP 8087 (the Service's :80 targets the
-# pod's :8087) from the node SG, or every run false-fails on a good build. Not confirmed
-# live -- mzla-tb-dev SSO was expired when this was written. If it is blocked, the fix is
+# pod's :8087) from the node SG, or every run false-fails on a good build. VERIFIED
+# REACHABLE 2026-08-10, by two independent rules: the node ENI carries
+# sg-08c51d43c4a250a81 and the SG admits 8087 from it, and separately admits 8087 from
+# 10.120.0.0/16 which contains the node IP. Kept as a note in case that CIDR rule is ever
+# tightened. If it is ever blocked, the fix is
 # to label the Job pod `app.kubernetes.io/name: accounts` +
 # `app.kubernetes.io/component: smoke`: every Service and the PDB in this repo select on
 # BOTH labels with component web/flower, so the Job would pick up the pod SG without ever
@@ -197,18 +199,30 @@ spec:
                           || { echo "FAIL: /sign-up returned 200 but the body has no Vue mount point"; exit 1; }
                         echo "GET /sign-up body: window._page + #app present"
 
-                        # Anonymous-auth contract. Location MUST be the root-relative
-                        # /login/ (urls.py registers it only when AUTH_SCHEME == 'oidc';
-                        # otherwise reverse('login') raises NoReverseMatch -> 500 here).
-                        # Root-relative cannot point off-cluster, and we never follow it.
-                        hdrs=$(curl -sS --noproxy '*' -m 10 -o /dev/null -D - -w 'HTTPCODE:%{http_code}\n' "$BASE/" | tr -d '\r' || true)
-                        code=$(printf '%s\n' "$hdrs" | sed -n 's/^HTTPCODE://p')
-                        [ "$code" = "302" ] || { echo "FAIL: GET / -> ${code:-000}, expected 302"; exit 1; }
-                        printf '%s\n' "$hdrs" | grep -qi '^location: */login/ *$' || {
-                          echo "FAIL: GET / returned 302 but Location is not the in-app /login/:"
-                          printf '%s\n' "$hdrs" | grep -i '^location:' || echo "  (no Location header at all)"
-                          exit 1; }
-                        echo "GET / -> 302 Location: /login/"
+                        # NO `GET /` ASSERTION. An earlier revision asserted
+                        # `GET / -> exactly 302, Location: /login/` as an anonymous-auth
+                        # contract. It does not hold on the path this gate actually uses,
+                        # and being fail-closed it would have failed EVERY AnalysisRun --
+                        # Rollout Degraded, Kargo re-promoting, which is the exact loop
+                        # appointment-deploy was stuck in on 2026-07-28.
+                        #
+                        # Measured on tb-dev 2026-08-10, same image, same moment:
+                        #   public ALB   GET /        -> 302  Location: /login/
+                        #   in-cluster   GET /        -> 400
+                        #   in-cluster   GET /login/  -> 400
+                        #   in-cluster   GET /sign-up -> 200   (both paths agree)
+                        # ALLOWED_HOSTS is "*", so this is not a plain DisallowedHost; the
+                        # redirecting routes behave differently when the request does not
+                        # arrive via the ALB. The earlier revision was validated by running
+                        # the script against the PUBLIC host, where the 302 is real -- the
+                        # same mistake as the `curl -L` bug it replaced: evidence gathered
+                        # from a path the gate never takes.
+                        #
+                        # Do not re-add a `/` check without probing it from INSIDE the
+                        # cluster against the preview Service first. The AUTH_SCHEME
+                        # regression coverage it claimed is genuinely lost, and was never
+                        # actually present in-cluster; if that coverage is wanted, find an
+                        # assertion that holds on the ClusterIP path.
                         echo "smoke: PASS"
                     resources:
                       requests:
