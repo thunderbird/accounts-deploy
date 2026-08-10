@@ -21,10 +21,39 @@
 # is already set.
 #
 # Rollouts will inject `rollouts-pod-template-hash` into .spec.selector on BOTH this
-# Service and `accounts` once a Rollout owns them. ArgoCD selfHeal would fight that, so
-# platform-infrastructure argocd/tb-dev/apps/accounts.yaml carries an ignoreDifferences
-# entry scoped to the argo-rollouts field manager for both Services. That must be in
-# place before the flip, or traffic can snap back to the wrong colour mid-rollout.
+# Service and `accounts` once a Rollout owns them, and ArgoCD selfHeal strips it back
+# out -- that breaks routing mid-rollout AND holds the Application OutOfSync, which
+# hangs the Kargo tb-dev Stage's argocd-wait even for a healthy build.
+#
+# THAT PROTECTION DOES NOT EXIST YET -- do not read the paragraph above as describing
+# today. Verified 2026-08-10: argocd/tb-dev/apps/accounts.yaml on platform-infrastructure
+# origin/main has ignoreDifferences only for ExternalSecret webhook defaults, the
+# accounts-redis-endpoint ConfigMap and the Reloader pod-template annotation. There is
+# no Service entry of any kind. platform-infrastructure#850 adds one but is still OPEN
+# (state OPEN, mergedAt null as of this commit), so nothing protects those selectors yet.
+#
+# #850 now uses the right mechanism -- `jsonPointers: [/spec/selector]` on each Service,
+# matching the working precedent on this cluster (argocd/{tb-dev,tb-prod}/apps/
+# appointment.yaml, which does exactly that on all four active/preview Services). An
+# earlier revision of #850 used `managedFieldsManagers: [argo-rollouts]` and was a
+# permanent no-op; that has been retracted in the PR. DO NOT REINTRODUCE IT: Argo Rollouts
+# never sets a UserAgent on its rest.Config, so the apiserver derives the field manager
+# from the binary name and records `rollouts-controller`, while ArgoCD matches
+# managedFieldsManagers by exact string equality -- `argo-rollouts` matches nothing.
+# Confirm the recorded manager against a Service a Rollout already owns before trusting
+# any field-manager-scoped form:
+#   kubectl -n appointment get svc appointment-backend \
+#     -o jsonpath='{range .metadata.managedFields[*]}{.manager}{"\n"}{end}'
+# For a Service the two forms are behaviourally identical anyway (`spec.selector` is
+# +mapType=atomic, so it is one leaf owned by one manager); the jsonPointers form is
+# preferred only because it cannot be silently defeated by a manager-name mismatch. Its
+# cost is that a git-side selector edit would also stop reconciling, which is acceptable:
+# the selector on a Rollouts-owned Service is not something git should be changing.
+#
+# PREREQUISITE, STILL PENDING: platform-infrastructure#850 must be MERGED, and the ignore
+# verified against live .metadata.managedFields, before accounts-web is flipped to a
+# Rollout. Flip first and selfHeal fights the controller, so traffic can snap back to the
+# wrong colour mid-rollout.
 #
 # NOT added to bases/: prod has no Rollouts controller wired for accounts yet, and the
 # design is explicit that the conversion happens as an overlay-scoped change rather than
