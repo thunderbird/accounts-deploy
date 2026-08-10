@@ -1,10 +1,17 @@
-# tb-dev HOTPATCH: mount a v0.16-ported thunderbird_accounts/mail/clients.py over
-# the image's copy, so the app can talk to Stalwart v0.16.13 (which removed the REST
-# management API the shipped client targets). Delivered as a ConfigMap file-mount
-# (subPath) rather than an app-repo change; the proper clients.py PR lands upstream
-# later. configMapGenerator hashes the CM name, so each edit rolls the pods; the
-# Reloader annotation also covers it. Mounted on all three deployments that load
-# MailClient (web serves /health; celery runs provisioning tasks).
+# tb-dev HOTPATCH: mount the v0.16-ported thunderbird_accounts/mail/clients/ PACKAGE
+# over the image, so the app can talk to Stalwart v0.16.13 (which removed the REST
+# management API the shipped client targets). Delivered as a ConfigMap directory-mount
+# rather than an app-repo change; the proper package PR lands upstream later.
+#
+# The image ships a single-file `mail/clients.py`. We mount the whole ConfigMap as the
+# directory `mail/clients/` (no subPath). The image has no `clients/` dir, so kubelet
+# creates it; Python's FileFinder prefers a package (`clients/__init__.py`) over a
+# sibling `clients.py` module of the same name, so the mounted package wins. The stale
+# `clients.py` (and its __pycache__) are never imported.
+#
+# configMapGenerator hashes the CM name, so each edit rolls the pods; the Reloader
+# annotation also covers it. Mounted on all three deployments that load MailClient
+# (web serves /health; celery runs provisioning tasks).
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -22,8 +29,7 @@ spec:
         - name: accounts
           volumeMounts:
             - name: clients-hotpatch
-              mountPath: /app/src/thunderbird_accounts/mail/clients.py
-              subPath: clients.py
+              mountPath: /app/src/thunderbird_accounts/mail/clients
               readOnly: true
 ---
 apiVersion: apps/v1
@@ -42,8 +48,7 @@ spec:
         - name: accounts-celery
           volumeMounts:
             - name: clients-hotpatch
-              mountPath: /app/src/thunderbird_accounts/mail/clients.py
-              subPath: clients.py
+              mountPath: /app/src/thunderbird_accounts/mail/clients
               readOnly: true
 ---
 apiVersion: apps/v1
@@ -62,6 +67,5 @@ spec:
         - name: accounts-flower
           volumeMounts:
             - name: clients-hotpatch
-              mountPath: /app/src/thunderbird_accounts/mail/clients.py
-              subPath: clients.py
+              mountPath: /app/src/thunderbird_accounts/mail/clients
               readOnly: true
