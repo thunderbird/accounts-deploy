@@ -9,16 +9,16 @@
 # Paddle product/price sync and then starts Uvicorn. Migrations therefore run on
 # web pod startup (as on ECS today); dev runs a single web replica to avoid
 # concurrent migrate. Moving migrate out of the entrypoint is tracked in
-# thunderbird/thunderbird-accounts#1191 -- it is a prerequisite for blue-green, since
-# green migrates the shared DB before any pre-promotion check runs and aborting does
-# not roll the schema back. (The previous reference here, platform-infrastructure#144,
-# is a CLOSED milestone and tracked nothing.)
+# thunderbird/thunderbird-accounts#1191 -- it makes blue-green unsafe rather than
+# impossible, since green migrates the shared DB before any pre-promotion check runs
+# and aborting does not roll the schema back. (The previous reference here,
+# platform-infrastructure#144, is a CLOSED milestone and tracked nothing.)
 #
 # HEALTH: GET /health deep-checks the Keycloak admin API + dependencies, so it is
 # used as the READINESS gate only; liveness/startup use a lightweight TCP check so
 # a transient dependency blip doesn't kill the pod. Two defects make that gate weaker
-# than it looks -- /health returns 200 regardless of dependency state, and 500s if
-# Keycloak or Stalwart is unreachable -- tracked in
+# than it looks -- /health's status code never reflects dependency state, and it 500s
+# if Keycloak or Stalwart is unreachable -- tracked in
 # thunderbird/thunderbird-accounts#1192. overlays/tb-dev replaces this readiness probe
 # with a bare TCP check as a result; revert that once #1192 lands.
 #
