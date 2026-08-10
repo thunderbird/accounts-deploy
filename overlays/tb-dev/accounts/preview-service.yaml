@@ -13,26 +13,43 @@
 # So moving blue-green -> canary later is a strategy-block swap plus a trafficRouting
 # stanza, not a re-architecture.
 #
-# Canary via ALB IS available on this cluster, contrary to the "canary rejected -- ALB,
-# no traffic router" line in the accounts pipeline design doc: the accounts-public
-# Ingress is ingressClassName=alb with target-type=ip and aws-load-balancer-controller
-# runs here, which is exactly Argo Rollouts' supported ALB traffic-router configuration
-# (strategy.canary.trafficRouting.alb). target-type=ip is a hard requirement for it and
-# is already set.
+# CANARY IS NOT WIRED, AND WOULD FAIL SILENTLY IF SWITCHED ON TODAY. The design doc's
+# stated reason ("canary rejected -- ALB, no traffic router") is out of date about the
+# CLUSTER -- argo-rollouts v1.9.0 and aws-load-balancer-controller both run here, and
+# Rollouts does support strategy.canary.trafficRouting.alb -- but accounts-public is not
+# a valid target as written:
+#   * Rollouts requires the managed rule to reference the stable/root Service with
+#     `port: {name: use-annotation}`. accounts-public's catch-all `/` rule is
+#     `service: accounts, port: {number: 80}`. (The /admin denies already use
+#     use-annotation; the forward rule does not.)
+#   * Rollouts matches that rule by SERVICE NAME ONLY, never the port, so it would write
+#     actions.accounts, log a successful patch and advance the step while the LB
+#     controller ignores an action whose rule is not use-annotation -- 100% of traffic
+#     stays on stable, with no error anywhere.
+#   * Flipping the rule to use-annotation needs a git-seeded actions.accounts value first,
+#     or LBC rejects the whole Ingress -- deny rules included.
+# An earlier revision of this comment claimed canary was "exactly Rollouts' supported
+# setup" and that target-type=ip was "a hard requirement". Both were wrong: ip mode is not
+# required (Rollouts documents weighted ALB routing for instance mode too), and the setup
+# is not supported as configured. See the Canary section of platform-infrastructure#850.
 #
 # Rollouts will inject `rollouts-pod-template-hash` into .spec.selector on BOTH this
 # Service and `accounts` once a Rollout owns them, and ArgoCD selfHeal strips it back
 # out -- that breaks routing mid-rollout AND holds the Application OutOfSync, which
 # hangs the Kargo tb-dev Stage's argocd-wait even for a healthy build.
 #
-# THAT PROTECTION DOES NOT EXIST YET -- do not read the paragraph above as describing
-# today. Verified 2026-08-10: argocd/tb-dev/apps/accounts.yaml on platform-infrastructure
-# origin/main has ignoreDifferences only for ExternalSecret webhook defaults, the
-# accounts-redis-endpoint ConfigMap and the Reloader pod-template annotation. There is
-# no Service entry of any kind. platform-infrastructure#850 adds one but is still OPEN
-# (state OPEN, mergedAt null as of this commit), so nothing protects those selectors yet.
+# THAT PROTECTION IS NOW IN PLACE. platform-infrastructure#850 merged as 96cc6de on
+# 2026-08-10 and was confirmed live on the cluster the same day: tb-dev-accounts carries
+# jsonPointers [/spec/selector] for BOTH `accounts` and `accounts-preview`, two key-scoped
+# pointers for the accounts-public ALB annotations, an argoproj.io/Rollout entry for the
+# Reloader annotation, and PruneLast=true in syncOptions -- Synced/Healthy.
 #
-# #850 now uses the right mechanism -- `jsonPointers: [/spec/selector]` on each Service,
+# Note the two-step: merging to platform-infrastructure main is NOT enough on its own.
+# This Application's manifest is owned by the `tb-dev-app-of-apps` Application, so the
+# change only reaches the cluster once THAT app syncs. Verified after a hard refresh of
+# tb-dev-app-of-apps, not merely after the merge.
+#
+# #850 uses `jsonPointers: [/spec/selector]` on each Service,
 # matching the working precedent on this cluster (argocd/{tb-dev,tb-prod}/apps/
 # appointment.yaml, which does exactly that on all four active/preview Services). An
 # earlier revision of #850 used `managedFieldsManagers: [argo-rollouts]` and was a
@@ -50,10 +67,15 @@
 # cost is that a git-side selector edit would also stop reconciling, which is acceptable:
 # the selector on a Rollouts-owned Service is not something git should be changing.
 #
-# PREREQUISITE, STILL PENDING: platform-infrastructure#850 must be MERGED, and the ignore
-# verified against live .metadata.managedFields, before accounts-web is flipped to a
-# Rollout. Flip first and selfHeal fights the controller, so traffic can snap back to the
-# wrong colour mid-rollout.
+# REMAINING PREREQUISITES before accounts-web is flipped to a Rollout (#850 is done):
+#   * accounts-deploy main and env/tb-dev are diverged on the hotpatch, and this overlay
+#     renders from env/tb-dev -- reconcile before the flip.
+#   * The smoke Job is NOT selected by the `accounts` SecurityGroupPolicy, so its pod uses
+#     the node ENI. sg-0dba8adea7684454f must admit 8087 from the node SG or the gate
+#     fails closed at the 120s wait on every single run. Unverified.
+#   * Two app-side blockers, both unchanged: migrations run on container boot (green
+#     migrates before the analysis; abort does not roll back the schema), and tb-dev
+#     readiness is a bare TCP check, so Rollout Healthy means "the port is open".
 #
 # NOT added to bases/: prod has no Rollouts controller wired for accounts yet, and the
 # design is explicit that the conversion happens as an overlay-scoped change rather than
