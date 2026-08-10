@@ -1,0 +1,259 @@
+# tb-dev: in-cluster smoke for the Argo Rollouts PRE-promotion gate on accounts-web.
+#
+# WHY THIS IS NOT THE SIGN-IN E2E. The obvious move is to reuse `accounts-signin-e2e`
+# (the Playwright OIDC test added for Kargo freight verification) as the Rollout's
+# prePromotionAnalysis. That would be WRONG, and would pass while green was broken:
+#
+#   prePromotionAnalysis must test the PREVIEW (green) pods before traffic shifts. The
+#   sign-in test drives a browser through the PUBLIC host, because the OIDC redirect
+#   flow bounces via public Keycloak and cannot be pointed at a ClusterIP. The public
+#   host resolves to the ALB, and the ALB forwards to the ACTIVE (blue) Service. So the
+#   sign-in test exercises the OLD pods no matter which colour is under test.
+#
+# The two gates are therefore complementary, not redundant, and both should exist:
+#   - THIS template, as Rollout prePromotionAnalysis: reaches green directly, in-cluster,
+#     before any traffic moves. Catches "green does not boot / cannot reach its DB".
+#   - accounts-signin-e2e, as Kargo Stage verification: runs through the real edge after
+#     promotion, and is the only thing that exercises the OIDC round-trip end to end.
+#
+# LINEAGE. Two structural pieces are ported from appointment-deploy's
+# `appointment-backend-smoke` **in its post-fix form** (appointment-deploy origin/main
+# 641d2df): the numeric runAsUser/runAsGroup from 9fab7c7, and the bounded readiness
+# wait from 641d2df. Both were fixes to real tb-dev outages. Do NOT copy the earlier
+# shape of that file -- its Job pod could not start at all. Everything else here
+# DIVERGES from appointment deliberately, because Django's `/` is not a health
+# endpoint: appointment asserts a strict `GET / -> 200`; we assert an explicit public
+# route and its rendered body, and we never follow a redirect. This template is NOT a
+# mirror of appointment's assertions and must not be described as one.
+#
+# PARAMETERISED ON THE TARGET SERVICE so the same template serves both strategies:
+#   blue-green -> passed the previewService by strategy.blueGreen.prePromotionAnalysis
+#   canary     -> passed the canaryService by strategy.canary.steps[].analysis
+# Never hardcode `accounts-preview` here; that is what makes the later canary switch a
+# strategy-block swap rather than a rewrite.
+#
+# NEVER `curl -L`. This is the single most important rule in this file. Django's
+# `GET /` 302s an anonymous request to `/login/`, which 302s to `/oidc/authenticate/`,
+# which 302s to https://auth.tb-dev.thunderbird.dev/realms/tbpro/... . Following that
+# chain makes `%{http_code}` PUBLIC KEYCLOAK's status code, measured three hops and a
+# NAT-gateway round-trip away from the pod under test -- so the gate would report a
+# cheerful 200 while green served nothing but a redirect. Verified 2026-08-10 against
+# the tb-dev host: `curl -L /` returns 200 from the Keycloak auth endpoint. Redirects
+# are therefore never followed. As of 2026-08-10 no redirect is inspected at all -- the
+# `GET /` assertion was removed because in-cluster it returns 400, not the 302 the public
+# ALB gives; see the note at that point in the script.
+# `--noproxy '*'` is belt-and-braces against a future injected `*_proxy` env.
+#
+# WHAT THIS GATE ASSERTS (all fail-closed; count: 1 / failureLimit: 0 / backoffLimit: 0,
+# so any one of them aborts the Rollout with the active Service NOT flipped):
+#   1. GET /sign-up -> 200, after a bounded readiness wait. `/sign-up` is in the
+#      `public_routes` list in core/views.py `home()`, so it renders index.html rather
+#      than redirecting. That render calls get_visible_plan_info(), which runs
+#      `Plan.objects.filter(...).first()` plus a price_set query -- an unconditional
+#      Postgres round-trip. A dead DB, an unapplied migration or a missing vite
+#      manifest raises -> handler500 -> 500 -> gate fails.
+#   2. The /sign-up body carries `window._page` and `id="app"`, proving the Django/Vue
+#      shell actually rendered rather than an ALB error page or a proxy interstitial.
+#   (There is deliberately NO `GET /` assertion -- in-cluster it returns 400, not
+#   the 302 the public ALB gives. See the long note at that point in the script.)
+
+# WHAT THIS DOES *NOT* COVER, stated plainly so it is not mistaken for a real gate:
+#   - REDIS IS NOT ASSERTED. Nothing on these two routes touches the cache: sessions
+#     are not read for an anonymous request (no cookie -> SessionStore.session_key is
+#     None -> no query) and get_feature_flags() reads settings, not cache. A green pod
+#     with a wrong REDIS_URL or a blocked ElastiCache SG passes this gate.
+#   - KEYCLOAK, STALWART, CELERY, PADDLE AND THE AUTH ROUND-TRIP ARE NOT ASSERTED. No
+#     credential is exercised; nothing is written. `accounts-signin-e2e` after
+#     promotion remains the only end-to-end auth check.
+#   - IT DELIBERATELY DOES NOT GATE ON /health, and the old reason recorded here ("it
+#     500s because Stalwart is unwired") is STALE -- /health returns 200 on tb-dev today
+#     with keycloak, stalwart, redis and database all true (verified 2026-08-10). Two
+#     better reasons stand. (a) The status code is worthless: infra/views.py
+#     health_check() ends in `return JsonResponse(connection_stats)` with no `status`
+#     kwarg, so it returns 200 even when every dependency reports false. (b) Its body
+#     couples this gate to EXTERNAL deps: __check_keycloak/__check_stalwart catch only
+#     requests.exceptions.HTTPError, so a ConnectionError to either propagates and 500s
+#     the whole endpoint -- a Keycloak restart mid-rollout would abort a rollout of a
+#     perfectly good accounts image, which is exactly the re-promotion storm class we
+#     are trying to avoid. If Redis coverage is wanted later, assert the `"redis"` and
+#     `"database"` booleans out of the /health BODY, and only those.
+#   - IT SAMPLES THE SERVICE VIP, NOT EVERY REPLICA. With N preview pods the three
+#     checks may land on different pods, and one bad pod among N can be missed.
+#   - IT IS COUPLED TO A ROUTE LIST IN ANOTHER REPO. `/sign-up` returning 200 depends on
+#     `public_routes` in thunderbird-accounts core/views.py. That list drifts: `/privacy`
+#     and `/terms` are in it on HEAD but 302 on the image currently deployed to tb-dev.
+#     Removal of `/sign-up` fails this gate closed (302 != 200), never open -- but
+#     re-probe before substituting a different path.
+#   - IT DOES NOT PORT TO tb-prod AS WRITTEN. It relies on tb-dev's ALLOWED_HOSTS="*".
+#     Prod pins ALLOWED_HOSTS and SetHostIPInAllowedHostsMiddleware adds only the pod's
+#     own IP, not the Service DNS name, so both checks would return 400
+#     DisallowedHost. The remedy is one flag: `-H "Host: <pinned public host>"`.
+#   - Because tb-dev readiness is TCP-only, Rollout `Healthy` on this cluster means
+#     little independently of this analysis. prod keeps the /health readiness from
+#     bases/, so dev and prod do NOT agree on what Healthy means; a dev rehearsal does
+#     not transfer.
+#
+# SG DEPENDENCY, UNVERIFIED (local task #54, platform-infrastructure#596). This Job pod
+# is labelled `app.kubernetes.io/name: accounts-web-smoke`, so it is NOT selected by the
+# `accounts` SecurityGroupPolicy (podSelector `app.kubernetes.io/name: accounts`) and
+# under POD_SECURITY_GROUP_ENFORCING_MODE=strict it uses the node SG. The web pod SG
+# sg-0dba8adea7684454f must therefore admit TCP 8087 (the Service's :80 targets the
+# pod's :8087) from the node SG, or every run false-fails on a good build. VERIFIED
+# REACHABLE 2026-08-10, by two independent rules: the node ENI carries
+# sg-08c51d43c4a250a81 and the SG admits 8087 from it, and separately admits 8087 from
+# 10.120.0.0/16 which contains the node IP. Kept as a note in case that CIDR rule is ever
+# tightened. If it is ever blocked, the fix is
+# to label the Job pod `app.kubernetes.io/name: accounts` +
+# `app.kubernetes.io/component: smoke`: every Service and the PDB in this repo select on
+# BOTH labels with component web/flower, so the Job would pick up the pod SG without ever
+# becoming a Service endpoint. Cost: a branch ENI, which worsens the CNI race below.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: accounts-web-smoke
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+spec:
+  args:
+    # Service name to probe. Supplied by the Rollout; see the header for which field
+    # provides it under each strategy.
+    - name: target-service
+  metrics:
+    - name: web-smoke
+      count: 1
+      # Still fail-closed: ONE measurement, zero tolerated failures. The tolerance for a
+      # slow start lives inside the script (a bounded readiness wait), not here -- so a
+      # service that never becomes healthy still fails the gate, while a service that is
+      # merely slow to get an IP does not.
+      failureLimit: 0
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            # Hard ceiling so a hung probe cannot wedge a rollout. MUST exceed the
+            # in-script readiness wait (120s) plus the remaining assertions, or the
+            # deadline fires first and the metric fails with an EMPTY message.
+            activeDeadlineSeconds: 240
+            ttlSecondsAfterFinished: 86400
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: accounts-web-smoke
+              spec:
+                restartPolicy: Never
+                automountServiceAccountToken: false
+                nodeSelector:
+                  kubernetes.io/arch: arm64
+                  role: general
+                containers:
+                  - name: smoke
+                    image: curlimages/curl:8.11.1
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        set -eu
+                        BASE="http://{{args.target-service}}.accounts.svc.cluster.local:80"
+                        echo "smoke: target $BASE (in-cluster only; redirects are NEVER followed)"
+
+                        # Bounded readiness wait. prePromotionAnalysis starts as soon as
+                        # the preview ReplicaSet reports available, which can be before
+                        # its pods hold an IP. aws-node runs WARM_ENI_TARGET=1 /
+                        # WARM_PREFIX_TARGET=1, so a burst of preview pods (blue-green
+                        # transiently doubles the component) can outrun the warm pool;
+                        # the CNI then calls EC2 for another prefix and the pod fails
+                        # sandbox creation with "failed to assign an IP address" until
+                        # kubelet retries seconds later. The preview Service has no
+                        # endpoints in that window and an immediate curl is refused.
+                        # This aborted a rollout on a good build in appointment-deploy
+                        # on 2026-07-28 (their 641d2df); this loop is that fix.
+                        #
+                        # `|| true` on the substitution is load-bearing: under `set -eu`
+                        # a curl connect failure would otherwise abort the script right
+                        # here, which is what made the previous version's trailing
+                        # "000" branch unreachable dead code. With it, a refused connect
+                        # yields an empty body, code parses as empty, and the loop
+                        # reports last=000 and keeps waiting until the deadline.
+                        deadline=$(( $(date +%s) + 120 ))
+                        while : ; do
+                          resp=$(curl -sS --noproxy '*' -m 10 -w '\n%{http_code}' "$BASE/sign-up" || true)
+                          code=$(printf '%s' "$resp" | tail -n 1)
+                          if [ "$code" = "200" ]; then break; fi
+                          if [ "$(date +%s)" -ge "$deadline" ]; then
+                            echo "FAIL: $BASE/sign-up never returned 200 within 120s (last=${code:-000})"
+                            exit 1
+                          fi
+                          echo "waiting for a serving endpoint (last=${code:-000})"
+                          sleep 5
+                        done
+                        # /sign-up is in core/views.py home() public_routes, so it renders
+                        # index.html instead of redirecting. That render runs
+                        # get_visible_plan_info() -> Plan.objects.filter(...) -> a real
+                        # Postgres query, so a dead DB or an unapplied migration 500s here.
+                        echo "GET /sign-up -> 200"
+
+                        printf '%s' "$resp" | grep -q 'window._page' \
+                          || { echo "FAIL: /sign-up returned 200 but the body has no window._page"; exit 1; }
+                        printf '%s' "$resp" | grep -q 'id="app"' \
+                          || { echo "FAIL: /sign-up returned 200 but the body has no Vue mount point"; exit 1; }
+                        echo "GET /sign-up body: window._page + #app present"
+
+                        # NO `GET /` ASSERTION. An earlier revision asserted
+                        # `GET / -> exactly 302, Location: /login/` as an anonymous-auth
+                        # contract. It does not hold on the path this gate actually uses,
+                        # and being fail-closed it would have failed EVERY AnalysisRun --
+                        # Rollout Degraded, Kargo re-promoting, which is the exact loop
+                        # appointment-deploy was stuck in on 2026-07-28.
+                        #
+                        # Measured on tb-dev 2026-08-10, same image, same moment:
+                        #   public ALB   GET /        -> 302  Location: /login/
+                        #   in-cluster   GET /        -> 400
+                        #   in-cluster   GET /login/  -> 400
+                        #   in-cluster   GET /sign-up -> 200   (both paths agree)
+                        # ALLOWED_HOSTS is "*", so this is not a plain DisallowedHost; the
+                        # redirecting routes behave differently when the request does not
+                        # arrive via the ALB. The earlier revision was validated by running
+                        # the script against the PUBLIC host, where the 302 is real -- the
+                        # same mistake as the `curl -L` bug it replaced: evidence gathered
+                        # from a path the gate never takes.
+                        #
+                        # Do not re-add a `/` check without probing it from INSIDE the
+                        # cluster against the preview Service first. The AUTH_SCHEME
+                        # regression coverage it claimed is genuinely lost, and was never
+                        # actually present in-cluster; if that coverage is wanted, find an
+                        # assertion that holds on the ClusterIP path.
+                        echo "smoke: PASS"
+                    resources:
+                      requests:
+                        cpu: 50m
+                        memory: 64Mi
+                      limits:
+                        cpu: 250m
+                        memory: 128Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      # No emptyDir is needed: every response is held in a shell
+                      # variable and nothing is written to disk. (appointment's frontend
+                      # synthetic needs a /tmp emptyDir because it writes -o /tmp/cfg.js;
+                      # its backend smoke, like this one, does not.)
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop:
+                          - ALL
+                securityContext:
+                  runAsNonRoot: true
+                  # runAsUser/runAsGroup are MANDATORY here, not belt-and-braces.
+                  # curlimages/curl declares `USER curl_user` -- a NAME, not a numeric
+                  # uid -- and with runAsNonRoot and no numeric runAsUser the kubelet
+                  # cannot prove the user is non-root, so it refuses to start the
+                  # container: "container has runAsNonRoot and image has non-numeric
+                  # user (curl_user), cannot verify user is non-root". The pod never
+                  # runs, the Job hits activeDeadlineSeconds, and the metric fails with
+                  # an EMPTY value and no message -- which reads like a flaky probe
+                  # rather than a spec error. 100:101 is curl_user:curl_group in this
+                  # image; re-check on an image bump.
+                  runAsUser: 100
+                  runAsGroup: 101
+                  seccompProfile:
+                    type: RuntimeDefault
