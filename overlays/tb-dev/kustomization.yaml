@@ -10,6 +10,14 @@ resources:
 - accounts/tailscale-ingress.yaml
 - accounts/flower-ingress.yaml
 - accounts/securitygrouppolicy.yaml
+# Argo Rollouts PREP -- both inert until accounts-web is converted to a Rollout.
+# Landed ahead of the flip so the strategy change is one manifest edit rather than a
+# simultaneous Service + AnalysisTemplate + ArgoCD-ignoreDifferences change across two
+# repos. accounts-preview doubles as the blue-green previewService and the canary
+# canaryService; accounts-web-smoke is parameterised on its target so it serves as
+# prePromotionAnalysis now and canary steps[].analysis later. See each file's header.
+- accounts/preview-service.yaml
+- accounts/analysistemplate-web-smoke.yaml
 images:
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
