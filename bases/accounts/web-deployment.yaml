@@ -8,12 +8,19 @@
 # ENTRYPOINT: the default scripts/entry.sh path runs `manage.py migrate` +
 # Paddle product/price sync and then starts Uvicorn. Migrations therefore run on
 # web pod startup (as on ECS today); dev runs a single web replica to avoid
-# concurrent migrate. A dedicated pre-sync migration Job is a planned follow-up
-# (tracked under the Accounts-on-EKS epic, thunderbird/platform-infrastructure#144).
+# concurrent migrate. Moving migrate out of the entrypoint is tracked in
+# thunderbird/thunderbird-accounts#1191 -- it is a prerequisite for blue-green, since
+# green migrates the shared DB before any pre-promotion check runs and aborting does
+# not roll the schema back. (The previous reference here, platform-infrastructure#144,
+# is a CLOSED milestone and tracked nothing.)
 #
 # HEALTH: GET /health deep-checks the Keycloak admin API + dependencies, so it is
 # used as the READINESS gate only; liveness/startup use a lightweight TCP check so
-# a transient dependency blip doesn't kill the pod.
+# a transient dependency blip doesn't kill the pod. Two defects make that gate weaker
+# than it looks -- /health returns 200 regardless of dependency state, and 500s if
+# Keycloak or Stalwart is unreachable -- tracked in
+# thunderbird/thunderbird-accounts#1192. overlays/tb-dev replaces this readiness probe
+# with a bare TCP check as a result; revert that once #1192 lands.
 #
 # SCHEDULING: the general arm64 node group. The image must be arm64 (multi-arch).
 apiVersion: apps/v1
