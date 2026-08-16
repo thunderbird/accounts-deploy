@@ -1,0 +1,117 @@
+# Kargo freight-verification AnalysisTemplate for Thunderbird Pro Accounts on tb-dev.
+#
+# Kargo verifies freight by running an Argo-Rollouts AnalysisTemplate; this one runs
+# the `@deployment-analysis` Playwright sign-in E2E from thunderbird-accounts
+# (test/e2e, thunderbird-accounts#1146) against the freshly-promoted tb-dev deployment.
+# If sign-in breaks, the AnalysisRun fails and the freight is not marked verified.
+#
+# Referenced from the Accounts Kargo Stage (tb-accounts/tb-dev):
+#
+#   spec:
+#     verification:
+#       analysisTemplates:
+#         - name: accounts-signin-e2e
+#
+# AnalysisRuns (and the Jobs they spawn) run in the Kargo *Project* namespace
+# (`tb-accounts`), NOT the `accounts` app namespace, so this is applied there (not via
+# the ArgoCD app-of-apps that syncs overlays/).
+#
+# APPROACH (b): a stock Playwright image checks out test/e2e at run time and runs the
+# suite directly — mirroring how Accounts CI runs it (validate.yml `run-e2e-tests-local`:
+# checkout + `npm ci` + `npx playwright install`), with no bespoke E2E image to build or
+# publish. The Playwright image tag is pinned to the repo's @playwright/test version
+# (1.59.1) so browsers match `npm ci`.
+#
+# FOLLOW-UP (c) — noted for later: instead of running Playwright in-cluster, have Kargo
+# trigger the existing GitHub Actions E2E workflow (an AnalysisTemplate `web`/webhook
+# provider that dispatches the workflow and polls its status). That reuses CI's exact
+# runner setup and secrets and needs no in-cluster browser/egress. Revisit if the
+# in-cluster clone/install proves slow or flaky, or if we want CI to own the run.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: accounts-signin-e2e
+  namespace: tb-accounts
+  labels:
+    app.kubernetes.io/part-of: thunderbird-accounts
+    app.kubernetes.io/component: freight-verification
+    kargo.akuity.io/env: tb-dev
+spec:
+  # One-shot verification: run the Job once; any failure fails the freight check.
+  metrics:
+    - name: signin-e2e
+      count: 1
+      failureLimit: 0
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            # Hard ceiling so a hung sign-in / install can't wedge a promotion.
+            activeDeadlineSeconds: 900
+            # Keep the finished Job (and its logs) around for a day for triage.
+            ttlSecondsAfterFinished: 86400
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: accounts-signin-e2e
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: signin-e2e
+                    # Stock Playwright image (node + browser OS deps), tag pinned to the
+                    # repo's @playwright/test version so `npx playwright install` matches.
+                    image: mcr.microsoft.com/playwright:v1.59.1-noble
+                    imagePullPolicy: IfNotPresent
+                    workingDir: /tmp
+                    # HOME under /tmp so npm/playwright caches are writable.
+                    command: ["/bin/bash", "-c"]
+                    args:
+                      - |
+                        set -euo pipefail
+                        export HOME=/tmp
+                        echo "cloning thunderbird-accounts@${ACCTS_E2E_REF} ..."
+                        git clone --depth 1 --branch "${ACCTS_E2E_REF}" \
+                          https://github.com/thunderbird/thunderbird-accounts.git /tmp/tba
+                        cd /tmp/tba/test/e2e
+                        npm ci
+                        # Browsers are baked into the image at this tag; this just
+                        # verifies/repairs the firefox build the suite uses.
+                        npx playwright install firefox
+                        npm run deployment-analysis-e2e
+                    env:
+                      # Public repo, so the clone needs no credentials. Ref to test
+                      # against (default main; pin to a tag/sha if you want to freeze).
+                      - name: ACCTS_E2E_REF
+                        value: "main"
+                      # --- The crux of this template ---------------------------------
+                      # Tell the suite which environment it targets. `dev` makes the
+                      # deployment-analysis sign-in test EXERCISE sign-in (the beforeEach
+                      # `ensureWeAreSignedIn`) but SKIP the subscription-detail dashboard
+                      # assertions — the tb-dev test user has no Pro subscription yet
+                      # (subscribe isn't automated on dev). (Upstream now defaults this to
+                      # `dev`, but we set it explicitly so the intent is pinned here.)
+                      - name: ACCTS_TARGET_ENV
+                        value: "dev"
+                      # Public customer host (internet-facing ALB). Sign-in bounces
+                      # through the public Keycloak (auth.tb-dev.thunderbird.dev), so
+                      # this MUST be the public host, not the in-cluster Service.
+                      - name: ACCTS_HUB_URL
+                        value: "https://accounts.tb-dev.thunderbird.dev"
+                      # Existing Thundermail/Accounts test user on tb-dev. signIn()
+                      # defaults its username/password to these two vars.
+                      - name: ACCTS_OIDC_EMAIL
+                        valueFrom:
+                          secretKeyRef:
+                            name: accounts-e2e-creds
+                            key: ACCTS_OIDC_EMAIL
+                      - name: ACCTS_OIDC_PWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: accounts-e2e-creds
+                            key: ACCTS_OIDC_PWORD
+                    resources:
+                      requests:
+                        cpu: 500m
+                        memory: 1Gi
+                      limits:
+                        memory: 2Gi
