@@ -161,11 +161,25 @@ spec:
             failureThreshold: 3
           # tb-dev: TCP, not GET /health. Folded in from the deleted web-deployment.yaml
           # patch. /health is a deep composite (DB + Keycloak admin API + Stalwart mgmt
-          # API) that 500s while Stalwart is unwired (platform-infrastructure#597/#146),
-          # so the pod would never join the Service endpoints. This is blocker (2) in the
-          # header: it is why Rollout Healthy is a weak signal here. Restore the /health
-          # readiness from bases/ the moment Stalwart is wired, or split /health into
-          # shallow-liveness plus deep-readiness.
+          # API). This is blocker (2) in the header: it is why Rollout Healthy is a weak
+          # signal here.
+          #
+          # DO NOT restore the /health readiness because Stalwart is wired. An earlier
+          # revision of this comment said to, on the basis that /health "500s while
+          # Stalwart is unwired (platform-infrastructure#597/#146)". Stalwart IS wired now
+          # and /health returns 200 with keycloak, stalwart, redis and database all
+          # healthy=true (verified 2026-08-10) -- so following that instruction would drop
+          # the override for a reason that no longer exists, and expose this Rollout to
+          # aborting whenever an optional dependency restarts.
+          #
+          # The revert trigger is thunderbird-accounts#1192 landing, not Stalwart. Two
+          # defects there make /health unfit as a readiness probe: its status code carries
+          # no information (health_check() returns JsonResponse with no `status` kwarg, so
+          # 200 even when every dependency is false), and it 500s when a dependency is
+          # UNREACHABLE (__check_keycloak/__check_stalwart catch only HTTPError, so a
+          # ConnectionError propagates). Under blue-green the second one is the dangerous
+          # half: a Keycloak restart mid-rollout would fail prePromotionAnalysis and abort
+          # a rollout of a perfectly good accounts image.
           readinessProbe:
             httpGet: null
             tcpSocket:
