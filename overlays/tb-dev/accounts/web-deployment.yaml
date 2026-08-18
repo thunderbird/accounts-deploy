@@ -1,12 +1,25 @@
 # tb-dev: single web replica. The default entrypoint runs `manage.py migrate`
 # on boot, so one replica avoids concurrent migrations during dev validation.
 #
-# Readiness: the base uses GET /health, which is a deep composite check (DB +
-# Keycloak admin API + Stalwart mgmt API). On the tailnet dev instance Stalwart
-# isn't wired yet (#597/#146), so /health 500s and the pod never joins the
-# Service endpoints. For dev validation, gate readiness on a lightweight TCP
-# check so the app serves (and login can be exercised) independent of the
-# optional deep deps. prod keeps the /health readiness from the base.
+# Readiness: the base uses GET /health, a deep composite check (DB + Keycloak admin
+# API + Stalwart mgmt API). This overlay replaces it with a lightweight TCP check.
+#
+# THE ORIGINAL REASON IS STALE -- DO NOT ACT ON IT. This comment used to say Stalwart
+# "isn't wired yet (#597/#146), so /health 500s". Stalwart IS wired now, and /health
+# returns 200 on tb-dev with keycloak, stalwart, redis and database all healthy=true
+# (verified 2026-08-10). Restoring the /health readiness on that basis would be wrong.
+#
+# The override stays for two DIFFERENT reasons, both tracked in
+# thunderbird/thunderbird-accounts#1192:
+#   1. /health's status code carries no information -- health_check() ends in
+#      `return JsonResponse(connection_stats)` with no `status` kwarg, so it returns 200
+#      even when every dependency reports false.
+#   2. It 500s when a dependency is UNREACHABLE -- __check_keycloak/__check_stalwart
+#      catch only requests.exceptions.HTTPError, so a ConnectionError propagates. A
+#      Keycloak restart would mark every accounts pod unready at once.
+#
+# So the trigger for reverting this override is #1192 landing, NOT Stalwart being wired.
+# prod keeps the /health readiness from the base, which is where (2) actually bites.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
