@@ -90,27 +90,3 @@ data:
   # private in-cluster link (default is true). Traffic stays TLS-encrypted and never
   # leaves the cluster/VPC.
   VERIFY_PRIVATE_LINK_SSL: "false"
-
-  # ---- Stalwart v0.16 admin API (JMAP) ----
-  # Selects upstream's JMAP admin client over the pre-0.16 REST one:
-  #   MailClient = MailClientLegacy if not STALWART_ADMIN_API_USE_JMAP else MailClientAdminJMAP
-  # Required because tb-dev Stalwart is v0.16.16 (thundermail ns), and 0.16 removed the
-  # REST /api/* management surface the legacy client targets.
-  STALWART_ADMIN_API_USE_JMAP: "true"
-  # Base URL for JMAP. The in-cluster listener is the ONLY one that accepts the admin
-  # credential: GET /.well-known/jmap returns 200 here and 401 on the public host.
-  STALWART_JMAP_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
-  # JMAPClient b64-encodes f'{user}:{secret}' itself, so these are supplied SPLIT rather
-  # than as the pre-encoded STALWART_API_AUTH_STRING. The user/secret pair comes from
-  # mzla/tb-dev/accounts (STALWART_JMAP_API_AUTH_USER / _AUTH_SECRET) via the
-  # accounts-secrets ExternalSecret, which extracts the whole bundle into envFrom.
-  STALWART_JMAP_API_AUTH_METHOD: "basic"
-  #
-  # KNOWN LIVE ISSUE, measured not predicted: upstream's JMAPClient.get_session() sets
-  # self.api_url from the SERVER-advertised session.apiUrl and uses it for every
-  # subsequent call, ignoring the base URL above. Stalwart advertises the public host:
-  #   GET  <in-cluster>/.well-known/jmap            -> 200, apiUrl https://mail.stage-thundermail.com/jmap/
-  #   POST https://mail.stage-thundermail.com/jmap/ -> 401   (same credential)
-  # So admin JMAP calls are expected to 401 after a successful handshake until either
-  # Stalwart advertises the internal URL or the client honours this setting. Enabled
-  # anyway to exercise the shipped image without the hotpatch and capture real behaviour.
