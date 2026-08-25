@@ -85,6 +85,26 @@ data:
   # admit the accounts pod SG on 443 (thundermail-deploy overlays/tb-dev/
   # stalwart-mail/aws/security-groups.yaml). Finalized in #597.
   STALWART_BASE_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
+  # Route JMAP directly at STALWART_BASE_API_URL (the private in-cluster host) instead of
+  # following the apiUrl the Stalwart session advertises (which is the PUBLIC mail host,
+  # mail.dev-thundermail.com -- off the private link). With this true the client fetches the
+  # session from `${base}/session` and issues JMAP calls at `${base}` directly. Requires the
+  # merged client (thunderbird-accounts#1225, in the image since the mail/clients hotpatch was
+  # removed, accounts-deploy#58). /.well-known/jmap must still resolve for discovery.
+  STALWART_JMAP_API_IGNORE_API_URL: "true"
+  # Use the v0.16 JMAP admin client (thunderbird-accounts#1131) instead of the legacy REST
+  # management client. Stalwart 0.16 REMOVED the REST management API (/api/principal, /api/dkim,
+  # ...), so with this false the app 404s on principal lookup after login -> 500 on / -> OIDC
+  # redirect loop. `true` selects MailClientAdminJMAP, which does CRUD over the JMAP registry API.
+  STALWART_ADMIN_API_USE_JMAP: "true"
+  # Base URL the JMAP admin client targets (MailClientAdminJMAP -> JMAPClient). Same private
+  # in-cluster host as STALWART_BASE_API_URL; with IGNORE_API_URL=true the client hits
+  # ${url}/session and issues JMAP at ${url} directly (never the session's public apiUrl).
+  STALWART_JMAP_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
+  # Admin auth is HTTP Basic (thundermail:<secret>); the user/secret come from the ESO bundle
+  # (STALWART_JMAP_API_AUTH_USER/SECRET). Without this the client defaults to Bearer and admin
+  # auth fails. Not a secret -- just selects the auth scheme.
+  STALWART_JMAP_API_AUTH_METHOD: "basic"
   # Stalwart serves its 443 cert for the public mail host (mail.dev-thundermail.com),
   # not the in-cluster Service DNS name, so skip cert-name verification on this
   # private in-cluster link (default is true). Traffic stays TLS-encrypted and never
