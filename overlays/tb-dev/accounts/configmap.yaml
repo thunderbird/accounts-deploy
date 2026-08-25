@@ -97,10 +97,14 @@ data:
   # ...), so with this false the app 404s on principal lookup after login -> 500 on / -> OIDC
   # redirect loop. `true` selects MailClientAdminJMAP, which does CRUD over the JMAP registry API.
   STALWART_ADMIN_API_USE_JMAP: "true"
-  # Base URL the JMAP admin client targets (MailClientAdminJMAP -> JMAPClient). Same private
-  # in-cluster host as STALWART_BASE_API_URL; with IGNORE_API_URL=true the client hits
-  # ${url}/session and issues JMAP at ${url} directly (never the session's public apiUrl).
-  STALWART_JMAP_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
+  # The JMAP API ENDPOINT the admin client targets (MailClientAdminJMAP -> JMAPClient base_url).
+  # MUST include the /jmap path: with IGNORE_API_URL=true the deployed client discovers the
+  # session at ${url}/session and POSTs JMAP method calls to ${url}. Stalwart serves the session
+  # under the JMAP prefix (.../jmap/session -> 200; the bare .../session -> 404, which caused the
+  # post-login 500). So this is the private in-cluster host + /jmap, NOT the bare host. Because
+  # IGNORE_API_URL=true, the client uses this URL directly and never follows the session's
+  # advertised (public) apiUrl, so traffic stays on the private link.
+  STALWART_JMAP_API_URL: "https://stalwart-https.thundermail.svc.cluster.local/jmap"
   # Admin auth is HTTP Basic (thundermail:<secret>); the user/secret come from the ESO bundle
   # (STALWART_JMAP_API_AUTH_USER/SECRET). Without this the client defaults to Bearer and admin
   # auth fails. Not a secret -- just selects the auth scheme.
