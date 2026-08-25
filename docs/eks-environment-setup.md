@@ -342,14 +342,28 @@ Whole-secret `dataFrom`. **Key names only — no values.** (Same list is in
 | `OIDC_CLIENT_SECRET` | OIDC client secret (tbpro) | set |
 | `KEYCLOAK_ADMIN_CLIENT_ID` / `KEYCLOAK_ADMIN_CLIENT_SECRET` | admin API (client-credentials) | set |
 | `REDIS_URL` | Redis connection URL (broker/cache/results) | set |
-| `PADDLE_API_KEY` / `PADDLE_TOKEN` / `PADDLE_WEBHOOK_KEY` | Paddle billing | ⚠️ **EMPTY** |
-| `PADDLE_PRICE_ID_LO` / `PADDLE_PRICE_ID_MD` / `PADDLE_PRICE_ID_HI` | Paddle price IDs | ⚠️ **EMPTY** |
-| `STALWART_API_AUTH_STRING` / `STALWART_WEBHOOK_SECRET` | Stalwart mgmt + webhook | set |
-| `MAILCHIMP_API_KEY` / `MAILCHIMP_DC` / `MAILCHIMP_LIST_ID` | Mailchimp | set |
-| `ZENDESK_API_TOKEN` / `ZENDESK_SUBDOMAIN` / `ZENDESK_USER_EMAIL` | Zendesk | set |
-| `HOSTED_DKIM_CLOUDFLARE_API_TOKEN` | Cloudflare DKIM | set |
+| `PADDLE_API_KEY` / `PADDLE_TOKEN` / `PADDLE_WEBHOOK_KEY` | Paddle billing | set |
+| `PADDLE_PRICE_ID_LO` / `PADDLE_PRICE_ID_MD` / `PADDLE_PRICE_ID_HI` | Paddle price IDs | set |
+| `STALWART_API_AUTH_STRING` / `STALWART_WEBHOOK_SECRET` | Stalwart mgmt + webhook | ⚠️ partial — auth string set, `STALWART_WEBHOOK_SECRET` **EMPTY** |
+| `MAILCHIMP_API_KEY` / `MAILCHIMP_DC` / `MAILCHIMP_LIST_ID` | Mailchimp | ⚠️ **EMPTY** |
+| `ZENDESK_API_TOKEN` / `ZENDESK_SUBDOMAIN` / `ZENDESK_USER_EMAIL` | Zendesk | ⚠️ **EMPTY** — intentional, dev has no Zendesk tenant |
+| `HOSTED_DKIM_CLOUDFLARE_API_TOKEN` | Cloudflare DKIM | ⚠️ **EMPTY** |
 | `SENTRY_DSN` | Sentry | set |
-| `POSTHOG_API_KEY` | PostHog | set |
+| `POSTHOG_API_KEY` | PostHog | ⚠️ **EMPTY** |
+
+Read from `mzla/tb-dev/accounts` on 2026-08-19 (key names and value lengths only). An empty
+value is not the same as an absent key: ESO syncs it faithfully, so the env var exists and is
+the empty string. Code that interpolates one unguarded gets a malformed value rather than a
+`KeyError` — see thunderbird/thunderbird-accounts#1212, where an empty `ZENDESK_SUBDOMAIN`
+produced `https://.zendesk.com/...` and 500'd the support form.
+
+**tb-prod:** these must be populated in `mzla/tb-prod/accounts` before the real cutover. Zendesk
+additionally needs `ZENDESK_FORM_ID`, `ZENDESK_FORM_BROWSER_FIELD_ID` and
+`ZENDESK_FORM_OS_FIELD_ID`, which are **absent from the bundle entirely** rather than empty —
+the first is non-secret and belongs in the overlay ConfigMap, the other two come from Zendesk
+admin. Note the `envFrom` ordering in `bases/accounts/web-deployment.yaml`: `secretRef` is
+listed after `configMapRef`, so any key present in both resolves to the Secret's value. Adding
+a key to a ConfigMap while an empty copy exists in Secrets Manager silently keeps the empty one.
 
 ### 11.5 Secrets — `mzla/<ENV>/accounts-db` (ExternalSecret `accounts-db`)
 

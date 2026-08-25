@@ -22,29 +22,11 @@ images:
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
   digest: sha256:f443189906b0dba8a9a4aa5157af1d19a96137318eb686d9e245dec0e41de853
-# tb-dev HOTPATCH: generate a ConfigMap from the v0.16-ported `mail/clients/` PACKAGE
-# (combined arch of PRs #1145 + #1131). The hashed name means each edit changes the CM
-# name -> rolls the pods (Reloader also covers it). Mounted as a full directory over
-# `mail/clients` in accounts/clients-hotpatch-mount.yaml; Python's import machinery
-# prefers the mounted package dir over the image's stale `clients.py` module.
-configMapGenerator:
-- name: accounts-clients-hotpatch
-  files:
-  - __init__.py=hotpatch/clients/__init__.py
-  - jmap_client.py=hotpatch/clients/jmap_client.py
-  - jmap_types.py=hotpatch/clients/jmap_types.py
-  - mail_client_interface.py=hotpatch/clients/mail_client_interface.py
-  - mail_client_jmap.py=hotpatch/clients/mail_client_jmap.py
-  - mail_client_legacy.py=hotpatch/clients/mail_client_legacy.py
-  - stalwart_types.py=hotpatch/clients/stalwart_types.py
 patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
 # dev runs a single web replica (migrations run on web boot; avoid concurrency).
 - path: accounts/web-deployment.yaml
-# tb-dev HOTPATCH: mount the v0.16-ported clients.py over the image copy on all
-# three deployments (see accounts/clients-hotpatch-mount.yaml).
-- path: accounts/clients-hotpatch-mount.yaml
 # ExternalSecret remoteRef key -> mzla/tb-dev/*
 - target:
     group: external-secrets.io
