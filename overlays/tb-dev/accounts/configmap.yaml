@@ -85,6 +85,13 @@ data:
   # admit the accounts pod SG on 443 (thundermail-deploy overlays/tb-dev/
   # stalwart-mail/aws/security-groups.yaml). Finalized in #597.
   STALWART_BASE_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
+  # Route JMAP directly at STALWART_BASE_API_URL (the private in-cluster host) instead of
+  # following the apiUrl the Stalwart session advertises (which is the PUBLIC mail host,
+  # mail.dev-thundermail.com -- off the private link). With this true the client fetches the
+  # session from `${base}/session` and issues JMAP calls at `${base}` directly. Requires the
+  # merged client (thunderbird-accounts#1225, in the image since the mail/clients hotpatch was
+  # removed, accounts-deploy#58). /.well-known/jmap must still resolve for discovery.
+  STALWART_JMAP_API_IGNORE_API_URL: "true"
   # Stalwart serves its 443 cert for the public mail host (mail.dev-thundermail.com),
   # not the in-cluster Service DNS name, so skip cert-name verification on this
   # private in-cluster link (default is true). Traffic stays TLS-encrypted and never
