@@ -136,6 +136,18 @@ healthy, old targets drained, the running image matches staging, reconciliation
 completed, and realm discovery, login, MFA, introspection, and mail
 authentication work. A final targeted preview should report no changes.
 
-To roll back, restore the previous immutable image, preview and apply the same
-two targets, and record the rollback in source control. Never downgrade across
-a database migration unless Keycloak explicitly supports it.
+For rollback, use the exact ECR image reference recorded before promotion—not a
+Keycloak version tag or `latest`—and repeat the production steps:
+
+1. Create and merge a rollback PR that changes only `.keycloak_image` back to
+   the previous reference.
+2. Update a clean checkout to merged `main`.
+3. Rerun the Section 4 preview with the same two targets. Expect one task
+   definition replacement and one service update back to the previous image.
+4. Run the Section 4 `pulumi up`, wait for ECS steady state, and repeat every
+   verification above.
+5. Run a final targeted preview and confirm that it reports no changes.
+
+An image rollback does not reverse a database migration. Never deploy an older
+Keycloak image across a migrated database unless Keycloak's migration guidance
+explicitly supports it or the approved database-restore procedure is followed.
