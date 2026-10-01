@@ -21,7 +21,7 @@ resources:
 images:
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
-  digest: sha256:7ef8cf6b4a7ac95239ee7c8cf2e9c4bd382f385dae9c79a4cf0bc1480217afc6
+  digest: sha256:6b36dbc9dc7f63cb00fdc12c6a1717b4399b560401f028dfd31f1de452251f9d
 patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
