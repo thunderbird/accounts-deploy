@@ -22,10 +22,9 @@ data:
   PADDLE_ENV: "sandbox"
   # Public customer host (internet-facing ALB, thunderbird.dev TEST domain).
   PUBLIC_BASE_URL: "https://accounts.tb-dev.thunderbird.dev"
-  # Must match the tbpro Keycloak user domain (tb-dev is a stage clone: users are
-  # @stage-thundermail.com). First entry = PRIMARY_EMAIL_DOMAIN, which the admin
-  # Thundermail-address form requires. Matches stage's value.
-  ALLOWED_EMAIL_DOMAINS: "stage-thundermail.com"
+  # Must match the authdev Stalwart mail domain (users are @tbird.email). First
+  # entry = PRIMARY_EMAIL_DOMAIN, which the admin Thundermail-address form requires.
+  ALLOWED_EMAIL_DOMAINS: "tbird.email"
   # Dev: accept any Host so the ALB target-group health check (Host = pod IP) and
   # both ingresses pass. prod must pin this to the real host.
   ALLOWED_HOSTS: "*"
@@ -78,16 +77,15 @@ data:
   # admin auth fails. It still manages tbpro via KEYCLOAK_URL_API above.
   KEYCLOAK_ADMIN_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/master/protocol/openid-connect/token/"
 
-  # Stalwart (Thundermail) admin API. Thundermail runs in THIS cluster (thundermail
-  # namespace, thundermail-deploy), so Accounts reaches it directly over the
+  # Stalwart (Thundermail) admin API. The authdev instance runs in THIS cluster
+  # (thundermail-authdev namespace), so Accounts reaches it directly over the
   # in-cluster ClusterIP Service -- no VPC peering, no admin-lb NLB hairpin. The app
-  # appends `/api` to this base (mail/clients.py). The stalwart-server pod SG must
-  # admit the accounts pod SG on 443 (thundermail-deploy overlays/tb-dev/
-  # stalwart-mail/aws/security-groups.yaml). Finalized in #597.
-  STALWART_BASE_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
+  # appends `/api` to this base (mail/clients.py). The stalwart-server-authdev pod SG
+  # must admit the accounts pod SG on 443 (platform-infrastructure#1152).
+  STALWART_BASE_API_URL: "https://stalwart-https.thundermail-authdev.svc.cluster.local"
   # Route JMAP directly at STALWART_BASE_API_URL (the private in-cluster host) instead of
   # following the apiUrl the Stalwart session advertises (which is the PUBLIC mail host,
-  # mail.dev-thundermail.com -- off the private link). With this true the client fetches the
+  # mail.tbird.email -- off the private link). With this true the client fetches the
   # session from `${base}/session` and issues JMAP calls at `${base}` directly. Requires the
   # merged client (thunderbird-accounts#1225, in the image since the mail/clients hotpatch was
   # removed, accounts-deploy#58). /.well-known/jmap must still resolve for discovery.
@@ -104,12 +102,12 @@ data:
   # post-login 500). So this is the private in-cluster host + /jmap, NOT the bare host. Because
   # IGNORE_API_URL=true, the client uses this URL directly and never follows the session's
   # advertised (public) apiUrl, so traffic stays on the private link.
-  STALWART_JMAP_API_URL: "https://stalwart-https.thundermail.svc.cluster.local/jmap"
-  # Admin auth is HTTP Basic (thundermail:<secret>); the user/secret come from the ESO bundle
+  STALWART_JMAP_API_URL: "https://stalwart-https.thundermail-authdev.svc.cluster.local/jmap"
+  # Admin auth is HTTP Basic (<user>:<secret>); the user/secret come from the ESO bundle
   # (STALWART_JMAP_API_AUTH_USER/SECRET). Without this the client defaults to Bearer and admin
   # auth fails. Not a secret -- just selects the auth scheme.
   STALWART_JMAP_API_AUTH_METHOD: "basic"
-  # Stalwart serves its 443 cert for the public mail host (mail.dev-thundermail.com),
+  # Stalwart serves its 443 cert for the public mail host (mail.tbird.email),
   # not the in-cluster Service DNS name, so skip cert-name verification on this
   # private in-cluster link (default is true). Traffic stays TLS-encrypted and never
   # leaves the cluster/VPC.
