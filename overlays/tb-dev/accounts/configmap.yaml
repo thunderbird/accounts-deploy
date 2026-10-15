@@ -22,9 +22,9 @@ data:
   PADDLE_ENV: "sandbox"
   # Public customer host (internet-facing ALB, thunderbird.dev TEST domain).
   PUBLIC_BASE_URL: "https://accounts.tb-dev.thunderbird.dev"
-  # Must match the authdev Stalwart mail domain (users are @tbird.email). First
-  # entry = PRIMARY_EMAIL_DOMAIN, which the admin Thundermail-address form requires.
-  ALLOWED_EMAIL_DOMAINS: "tbird.email"
+  # First entry (tbird.email, the authdev Stalwart domain) is PRIMARY_EMAIL_DOMAIN;
+  # only it gets Stalwart mailboxes. stage-thundermail.com keeps existing users able to log in.
+  ALLOWED_EMAIL_DOMAINS: "tbird.email,stage-thundermail.com"
   # Dev: accept any Host so the ALB target-group health check (Host = pod IP) and
   # both ingresses pass. prod must pin this to the real host.
   ALLOWED_HOSTS: "*"
