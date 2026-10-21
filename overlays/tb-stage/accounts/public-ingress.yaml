@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: accounts-public
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/create-acm-cert: "true"
+    alb.ingress.kubernetes.io/success-codes: "200-399"
+    alb.ingress.kubernetes.io/actions.deny-admin: >-
+      {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden: admin is available on the internal network only."}}
+    external-dns.alpha.kubernetes.io/hostname: accounts.tb-stage.thunderbird.dev
+spec:
+  ingressClassName: alb
+  rules:
+    - host: accounts.tb-stage.thunderbird.dev
+      http:
+        paths:
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: deny-admin
+                port:
+                  name: use-annotation
+          - path: /mail/admin
+            pathType: Prefix
+            backend:
+              service:
+                name: deny-admin
+                port:
+                  name: use-annotation
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: accounts
+                port:
+                  number: 80

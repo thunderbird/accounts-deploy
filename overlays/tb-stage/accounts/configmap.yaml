@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: accounts-config
+  namespace: accounts
+data:
+  APP_ENV: "mzla-tb-stage"
+  PADDLE_ENV: "sandbox"
+  PUBLIC_BASE_URL: "https://accounts.tb-stage.thunderbird.dev"
+  ALLOWED_EMAIL_DOMAINS: "tb-stage.thunderbird.dev"
+  ALLOWED_HOSTS: "*"
+  CSRF_TRUSTED_ORIGINS: "https://accounts.tb-stage.thunderbird.dev,https://accounts-tb-stage.tail2726a2.ts.net"
+
+  IMAP_HOST: "mail.tb-stage.thunderbird.dev"
+  IMAP_PORT: "993"
+  IMAP_TLS: "True"
+  JMAP_HOST: "mail.tb-stage.thunderbird.dev"
+  JMAP_PORT: "443"
+  JMAP_TLS: "True"
+  SMTP_HOST: "mail.tb-stage.thunderbird.dev"
+  SMTP_PORT: "465"
+  SMTP_TLS: "True"
+
+  DATABASE_NAME: "neondb"
+  DATABASE_USER: "neondb_owner"
+
+  OIDC_URL_AUTH: "https://auth.tb-stage.thunderbird.dev/realms/tbpro/protocol/openid-connect/auth/"
+  OIDC_URL_LOGOUT: "https://auth.tb-stage.thunderbird.dev/realms/tbpro/protocol/openid-connect/logout/"
+  OIDC_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/token/"
+  OIDC_URL_USER: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/userinfo/"
+  OIDC_URL_JWKS: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/certs/"
+
+  KEYCLOAK_URL_API: "http://keycloak-customer.keycloak-customer.svc.cluster.local/admin/realms/tbpro/"
+  KEYCLOAK_ADMIN_CLIENT_ID: "tb-accounts-admin"
+  KEYCLOAK_ADMIN_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/master/protocol/openid-connect/token/"
+
+  STALWART_BASE_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
+  STALWART_JMAP_API_IGNORE_API_URL: "true"
+  STALWART_ADMIN_API_USE_JMAP: "true"
+  STALWART_JMAP_API_URL: "https://stalwart-https.thundermail.svc.cluster.local/jmap"
+  STALWART_JMAP_API_AUTH_METHOD: "basic"
+  VERIFY_PRIVATE_LINK_SSL: "false"

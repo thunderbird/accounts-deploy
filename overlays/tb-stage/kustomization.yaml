@@ -1,0 +1,79 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: accounts
+resources:
+- ../../bases
+- accounts/public-ingress.yaml
+- accounts/tailscale-ingress.yaml
+- accounts/flower-ingress.yaml
+- accounts/securitygrouppolicy.yaml
+- accounts/preview-service.yaml
+- accounts/analysistemplate-web-smoke.yaml
+images:
+- name: REPLACE_ACCOUNTS_ECR/accounts
+  newName: ghcr.io/thunderbird/thunderbird-accounts
+  digest: sha256:6bae681ffad1285475b27d9c82ae2d3e0ab29d6685b690619678aae72659c57f
+patches:
+- path: accounts/configmap.yaml
+- path: accounts/web-deployment.yaml
+- target:
+    group: external-secrets.io
+    version: v1
+    kind: ExternalSecret
+    name: accounts-secrets
+  patch: |-
+    - op: replace
+      path: /spec/dataFrom/0/extract/key
+      value: mzla/tb-stage/accounts
+- target:
+    group: external-secrets.io
+    version: v1
+    kind: ExternalSecret
+    name: accounts-db
+  patch: |-
+    - op: replace
+      path: /spec/data/0/remoteRef/key
+      value: mzla/tb-stage/accounts-db
+    - op: replace
+      path: /spec/data/1/remoteRef/key
+      value: mzla/tb-stage/accounts-db
+- target:
+    group: ec2.services.k8s.aws
+    version: v1alpha1
+    kind: SecurityGroup
+    name: accounts-redis
+  patch: |-
+    - op: replace
+      path: /spec/vpcID
+      value: REPLACE_ME_VPC_ID
+    - op: replace
+      path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
+      value: REPLACE_ME_ACCOUNTS_POD_SG
+- target:
+    group: elasticache.services.k8s.aws
+    version: v1alpha1
+    kind: CacheSubnetGroup
+    name: accounts-redis-subnets
+  patch: |-
+    - op: replace
+      path: /spec/subnetIDs
+      value:
+        - REPLACE_ME_PRIVATE_SUBNET_A
+        - REPLACE_ME_PRIVATE_SUBNET_B
+- target:
+    group: elasticache.services.k8s.aws
+    version: v1alpha1
+    kind: ReplicationGroup
+    name: accounts-redis
+  patch: |-
+    - op: replace
+      path: /spec/securityGroupIDs/0
+      value: REPLACE_ME_ACCOUNTS_REDIS_SG
+- target:
+    version: v1
+    kind: ConfigMap
+    name: accounts-db-endpoint
+  patch: |-
+    - op: add
+      path: /data/DATABASE_HOST
+      value: REPLACE_ME_NEON_BRANCH_HOST

@@ -1,0 +1,15 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flower-tb-stage
+  namespace: accounts
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - flower-tb-stage
+  defaultBackend:
+    service:
+      name: accounts-flower
+      port:
+        number: 5555

@@ -1,0 +1,15 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: accounts-tb-stage
+  namespace: accounts
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - accounts-tb-stage
+  defaultBackend:
+    service:
+      name: accounts
+      port:
+        number: 80

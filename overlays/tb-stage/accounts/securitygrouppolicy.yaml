@@ -1,0 +1,13 @@
+apiVersion: vpcresources.k8s.aws/v1beta1
+kind: SecurityGroupPolicy
+metadata:
+  name: accounts
+  namespace: accounts
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: accounts
+  securityGroups:
+    groupIds:
+      - REPLACE_ME_EKS_CLUSTER_SG
+      - REPLACE_ME_ACCOUNTS_POD_SG

@@ -35,6 +35,8 @@ bases/
 overlays/
   tb-dev/     public ALB (accounts.main.dev-thundermail.com) plus Tailscale Ingresses for admin
               and Flower; 1 web replica; mzla/tb-dev/* secrets
+  tb-stage/   public ALB (accounts.stage-thundermail.com) plus Tailscale Ingresses for admin
+              and Flower; 1 web replica; mzla/tb-stage/* secrets
   tb-prod/    tailnet-only validation (Tailscale Ingress); 2 web replicas; mzla/tb-prod/* secrets
               (public accounts.tb.pro via Cloudflare tunnel lands at cutover, #147)
 ```
