@@ -20,7 +20,7 @@ data:
   # STAGE setup; the PADDLE_TOKEN/API_KEY/WEBHOOK_KEY/PRICE_ID_* secrets come from the
   # ESO bundle (mzla/tb-dev/accounts, extracted from the stage Paddle creds).
   PADDLE_ENV: "sandbox"
-  # Public customer host (internet-facing ALB, thunderbird.dev TEST domain).
+  # Public customer host (internet-facing ALB, main.dev-thundermail.com).
   PUBLIC_BASE_URL: "https://accounts.main.dev-thundermail.com"
   # First entry is PRIMARY_EMAIL_DOMAIN and gets Stalwart mailboxes; the rest become aliases.
   # stage-thundermail.com stays primary because tb-dev forks the stage databases.

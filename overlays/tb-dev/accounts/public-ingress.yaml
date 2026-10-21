@@ -3,7 +3,7 @@
 #
 # Edge architecture (DECISION):
 #   - ALB Ingress (ingressClassName: alb) provisioned by the AWS Load Balancer
-#     Controller (v3.4.0, SA aws-lb-controller in kube-system).
+#     Controller (v3.4.3, SA aws-lb-controller in kube-system).
 #   - TLS: the HTTPS:443 listener uses the Pulumi-managed ACM wildcard
 #     *.main.dev-thundermail.com (mzla-tb-dev stack, platform-infrastructure#1453),
 #     attached via certificate-arn.
@@ -19,9 +19,8 @@
 #     paths never reach a pod from the public edge. Staff reach admin over the
 #     tailnet ingress instead. App-level is_staff/is_superuser gating stays as
 #     defense in depth. Flower stays tailnet-only (not exposed here).
-#   - Rule ORDER matters: the two deny rules MUST precede the catch-all "/" forward
-#     so the deny wins for those prefixes. The ALB controller orders listener rules
-#     by their appearance in this spec.
+#   - Rule priority: the ALB controller sorts Prefix paths longest-first, so the
+#     /admin and /mail/admin deny rules win over the catch-all "/" forward.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -37,8 +36,8 @@ metadata:
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/certificate-arn: REPLACE_ME_MAIN_WILDCARD_CERT_ARN
     # Target-group health check: no healthcheck-path is set, so the ALB probes the
-    # traffic port (8087) at "/". Django "/" commonly 30x-redirects (login/locale) and
-    # /health 500s on dev (Stalwart unwired), so accept 2xx-3xx to keep targets Healthy.
+    # traffic port (8087) at "/". Django "/" commonly 30x-redirects (login/locale),
+    # so accept 2xx-3xx to keep targets Healthy.
     # Tighten to a known-200 liveness path at the real-domain cutover.
     alb.ingress.kubernetes.io/success-codes: "200-399"
     # Fixed-response 403 action reused by both deny rules below.
@@ -52,7 +51,7 @@ spec:
     - host: accounts.main.dev-thundermail.com
       http:
         paths:
-          # Deny rules FIRST so they win over the catch-all forward below.
+          # Deny rules win over the catch-all forward below because their prefixes are longer.
           - path: /admin
             pathType: Prefix
             backend:
