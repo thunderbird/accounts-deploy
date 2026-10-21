@@ -33,7 +33,8 @@ bases/
               celery Deployment (worker + embedded beat, single replica), Service,
               PDB, ExternalSecret (secret bundle via ESO)
 overlays/
-  tb-dev/     tailnet-only (Tailscale Ingress); 1 web replica; mzla/tb-dev/* secrets
+  tb-dev/     public ALB (accounts.main.dev-thundermail.com) plus Tailscale Ingresses for admin
+              and Flower; 1 web replica; mzla/tb-dev/* secrets
   tb-prod/    tailnet-only validation (Tailscale Ingress); 2 web replicas; mzla/tb-prod/* secrets
               (public accounts.tb.pro via Cloudflare tunnel lands at cutover, #147)
 ```
