@@ -118,6 +118,7 @@ data:
   # (STALWART_JMAP_API_AUTH_USER/SECRET). Without this the client defaults to Bearer and admin
   # auth fails. Not a secret -- just selects the auth scheme.
   STALWART_JMAP_API_AUTH_METHOD: "basic"
+  USE_ALLOW_LIST: "True"
   # Stalwart serves its 443 cert for the public mail host (mail.tb-dev.thunderbird.dev),
   # not the in-cluster Service DNS name, so skip cert-name verification on this
   # private in-cluster link (default is true). Traffic stays TLS-encrypted and never
