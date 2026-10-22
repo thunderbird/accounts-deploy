@@ -72,9 +72,13 @@ patches:
     kind: ReplicationGroup
     name: accounts-redis
   patch: |-
-    - op: replace
-      path: /spec/securityGroupIDs/0
-      value: sg-009cbb8eaee3f0a3e
+    - op: remove
+      path: /spec/securityGroupIDs
+    - op: add
+      path: /spec/securityGroupRefs
+      value:
+        - from:
+            name: accounts-redis
     - op: replace
       path: /metadata/annotations/argocd.argoproj.io~1sync-wave
       value: "-1"
