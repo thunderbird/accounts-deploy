@@ -48,7 +48,7 @@ patches:
       value: vpc-0fae1c9a36a7f9637
     - op: replace
       path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
-      value: REPLACE_ME_ACCOUNTS_POD_SG
+      value: sg-057d4c54f424be299
 - target:
     group: elasticache.services.k8s.aws
     version: v1alpha1
