@@ -49,6 +49,9 @@ patches:
     - op: replace
       path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
       value: sg-057d4c54f424be299
+    - op: replace
+      path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+      value: "-2"
 - target:
     group: elasticache.services.k8s.aws
     version: v1alpha1
@@ -60,6 +63,9 @@ patches:
       value:
         - subnet-048b99aaf2118f800
         - subnet-0152e8003b9be103b
+    - op: replace
+      path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+      value: "-2"
 - target:
     group: elasticache.services.k8s.aws
     version: v1alpha1
@@ -69,6 +75,9 @@ patches:
     - op: replace
       path: /spec/securityGroupIDs/0
       value: REPLACE_ME_ACCOUNTS_REDIS_SG
+    - op: replace
+      path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+      value: "-1"
 - target:
     version: v1
     kind: ConfigMap

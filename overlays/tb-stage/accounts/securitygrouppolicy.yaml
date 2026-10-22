@@ -3,6 +3,8 @@ kind: SecurityGroupPolicy
 metadata:
   name: accounts
   namespace: accounts
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   podSelector:
     matchLabels:
