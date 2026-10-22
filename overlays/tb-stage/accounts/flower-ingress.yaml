@@ -1,3 +1,8 @@
+# Staff-only tailnet Ingress for tb-stage Flower (Celery monitoring). Flower exposes
+# broker internals, so it is NEVER public and NEVER behind the customer LB (docs
+# §12.3). No tailscale.com/funnel annotation: funnel would expose it publicly.
+#
+# Operator appends .<TAILNET>.ts.net -> flower-stage-thundermail.tail2726a2.ts.net
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -7,7 +12,7 @@ spec:
   ingressClassName: tailscale
   tls:
     - hosts:
-        - flower-tb-stage
+        - flower-stage-thundermail
   defaultBackend:
     service:
       name: accounts-flower

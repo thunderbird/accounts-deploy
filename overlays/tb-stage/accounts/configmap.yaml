@@ -1,3 +1,5 @@
+# tb-stage environment-specific, non-secret config. Layered over the base
+# accounts-config ConfigMap.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,11 +8,12 @@ metadata:
 data:
   APP_ENV: "mzla-tb-stage"
   PADDLE_ENV: "sandbox"
-  PUBLIC_BASE_URL: "https://accounts.tb-stage.thunderbird.dev"
-  ALLOWED_EMAIL_DOMAINS: "tb-stage.thunderbird.dev"
+  PUBLIC_BASE_URL: "https://accounts.stage-thundermail.com"
+  ALLOWED_EMAIL_DOMAINS: "stage-thundermail.com"
   ALLOWED_HOSTS: "*"
-  CSRF_TRUSTED_ORIGINS: "https://accounts.tb-stage.thunderbird.dev,https://accounts-tb-stage.tail2726a2.ts.net"
+  CSRF_TRUSTED_ORIGINS: "https://accounts.stage-thundermail.com,https://accounts-stage-thundermail.tail2726a2.ts.net"
 
+  # Mail hosts and STALWART_* are not renamed; platform-infrastructure#991 sets these.
   IMAP_HOST: "mail.tb-stage.thunderbird.dev"
   IMAP_PORT: "993"
   IMAP_TLS: "True"
@@ -24,8 +27,8 @@ data:
   DATABASE_NAME: "neondb"
   DATABASE_USER: "neondb_owner"
 
-  OIDC_URL_AUTH: "https://auth.tb-stage.thunderbird.dev/realms/tbpro/protocol/openid-connect/auth/"
-  OIDC_URL_LOGOUT: "https://auth.tb-stage.thunderbird.dev/realms/tbpro/protocol/openid-connect/logout/"
+  OIDC_URL_AUTH: "https://auth.stage-thundermail.com/realms/tbpro/protocol/openid-connect/auth/"
+  OIDC_URL_LOGOUT: "https://auth.stage-thundermail.com/realms/tbpro/protocol/openid-connect/logout/"
   OIDC_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/token/"
   OIDC_URL_USER: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/userinfo/"
   OIDC_URL_JWKS: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/certs/"

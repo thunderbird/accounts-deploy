@@ -1,3 +1,7 @@
+# Tailnet Ingress for the tb-stage Accounts web app (admin/staff). Public customer
+# traffic uses public-ingress.yaml (accounts.stage-thundermail.com).
+#
+# Operator appends .<TAILNET>.ts.net -> accounts-stage-thundermail.tail2726a2.ts.net
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -7,7 +11,7 @@ spec:
   ingressClassName: tailscale
   tls:
     - hosts:
-        - accounts-tb-stage
+        - accounts-stage-thundermail
   defaultBackend:
     service:
       name: accounts
