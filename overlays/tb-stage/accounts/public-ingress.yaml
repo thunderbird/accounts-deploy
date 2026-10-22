@@ -1,0 +1,69 @@
+# Public AWS ALB front door for the customer-facing Accounts web app on the tb-stage
+# cluster (mzla-eks-tb-stage01), served at accounts.stage-thundermail.com.
+#
+# Edge architecture (DECISION):
+#   - ALB Ingress (ingressClassName: alb) provisioned by the AWS Load Balancer
+#     Controller (SA aws-lb-controller in kube-system).
+#   - TLS: the HTTPS:443 listener uses the Pulumi-managed ACM cert for
+#     auth.stage-thundermail.com and accounts.stage-thundermail.com (mzla-tb-stage
+#     stack), attached via certificate-arn.
+#   - external-dns (Cloudflare provider, platform-infrastructure#1396) writes the
+#     DNS-only record for the host in the stage-thundermail.com zone.
+#   - target-type ip -> ALB registers accounts web pod IPs directly (VPC-CNI). The
+#     Ingress backend points at the `accounts` ClusterIP Service (port 80), whose
+#     targetPort is the pod's `http` port (:8087).
+#
+# Admin/staff split at the edge (docs §12.2):
+#   - The Django admin (/admin*) and the staff Stalwart route (/mail/admin*) are
+#     DENIED with an ALB fixed-response 403, served by the ALB itself, so admin
+#     paths never reach a pod from the public edge. Staff reach admin over the
+#     tailnet ingress instead. App-level is_staff/is_superuser gating stays as
+#     defense in depth. Flower stays tailnet-only (not exposed here).
+#   - Rule priority: the ALB controller sorts Prefix paths longest-first, so the
+#     /admin and /mail/admin deny rules win over the catch-all "/" forward.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: accounts-public
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-central-1:539160020475:certificate/b0c2b1fa-4c2d-414f-82df-ec5f42125001
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/success-codes: "200-399"
+    alb.ingress.kubernetes.io/actions.deny-admin: >-
+      {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden: admin is available on the internal network only."}}
+    external-dns.alpha.kubernetes.io/hostname: accounts.stage-thundermail.com
+spec:
+  ingressClassName: alb
+  rules:
+    - host: accounts.stage-thundermail.com
+      http:
+        paths:
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: deny-admin
+                port:
+                  name: use-annotation
+          - path: /mail/admin
+            pathType: Prefix
+            backend:
+              service:
+                name: deny-admin
+                port:
+                  name: use-annotation
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: accounts
+                port:
+                  number: 80

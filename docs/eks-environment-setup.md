@@ -436,6 +436,10 @@ for the tb-dev hostnames.
 - **App hostnames:** tb-dev serves `accounts.main.dev-thundermail.com` and
   `auth.main.dev-thundermail.com`; tb-prod uses `accounts.tb-prod.thunderbird.dev` and
   `auth.tb-prod.thunderbird.dev`. **Public apps: accounts + auth (keycloak) only.**
+- **tb-stage:** serves `accounts.stage-thundermail.com` and `auth.stage-thundermail.com` in
+  the Cloudflare zone `stage-thundermail.com`. `tb-stage-external-dns-cloudflare` writes
+  only those two records, and the Ingress `certificate-arn` comes from the `mzla-tb-stage`
+  stack output `acm_stage-thundermail_arn`.
 - **TLS on tb-dev:** the Ingress sets `alb.ingress.kubernetes.io/certificate-arn` to the
   Pulumi ACM wildcard `*.main.dev-thundermail.com` (`mzla-tb-dev` stack output
   `acm_main-dev-thundermail-wildcard_arn`).
