@@ -1,23 +1,14 @@
-# STAGED, UNREFERENCED (thunderbird.dev public endpoint, platform-infrastructure#613
-# / #614, epic #144) — intentionally NOT listed in overlays/tb-dev/kustomization.yaml
-# yet, so nothing changes at ArgoCD sync and the working tailnet-only dev setup + OIDC
-# stay untouched. Flipping public is a gated cutover.
-#
-# This is the public AWS ALB front door for the customer-facing Accounts web app on the
-# NEW tb-dev cluster (mzla-eks-tb-dev01), as an ADDITIONAL, parallel endpoint to the
-# legacy accounts.tb.pro (legacy is NOT touched / NOT migrated here).
+# Public AWS ALB front door for the customer-facing Accounts web app on the tb-dev
+# cluster (mzla-eks-tb-dev01), served at accounts.main.dev-thundermail.com.
 #
 # Edge architecture (DECISION):
 #   - ALB Ingress (ingressClassName: alb) provisioned by the AWS Load Balancer
-#     Controller (v3.4.0, SA aws-lb-controller in kube-system).
-#   - LBC Certificate Management (create-acm-cert): the controller AUTO-CREATES the
-#     ACM cert for the rule host, writes the DNS-validation record into the
-#     (ACK-managed) tb-dev.thunderbird.dev sub-zone, waits for ISSUED, and attaches
-#     it to the HTTPS:443 listener. No ACM ARN to fill in, no ACK acm cert CR, no
-#     DNS-validation glue. (Requires the controller-side feature gate
-#     EnableCertificateManagement=true; that lives in the LBC install, not here.)
-#   - external-dns (AWS provider, #625) writes the per-app A/ALIAS record for the host
-#     in the same sub-zone.
+#     Controller (v3.4.3, SA aws-lb-controller in kube-system).
+#   - TLS: the HTTPS:443 listener uses the Pulumi-managed ACM wildcard
+#     *.main.dev-thundermail.com (mzla-tb-dev stack, platform-infrastructure#1453),
+#     attached via certificate-arn.
+#   - external-dns (Cloudflare provider, platform-infrastructure#1452) writes the
+#     DNS-only record for the host in the dev-thundermail.com zone.
 #   - target-type ip -> ALB registers accounts web pod IPs directly (VPC-CNI). The
 #     Ingress backend points at the `accounts` ClusterIP Service (port 80), whose
 #     targetPort is the pod's `http` port (:8087).
@@ -28,9 +19,8 @@
 #     paths never reach a pod from the public edge. Staff reach admin over the
 #     tailnet ingress instead. App-level is_staff/is_superuser gating stays as
 #     defense in depth. Flower stays tailnet-only (not exposed here).
-#   - Rule ORDER matters: the two deny rules MUST precede the catch-all "/" forward
-#     so the deny wins for those prefixes. The ALB controller orders listener rules
-#     by their appearance in this spec.
+#   - Rule priority: the ALB controller sorts Prefix paths longest-first, so the
+#     /admin and /mail/admin deny rules win over the catch-all "/" forward.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -44,28 +34,24 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
-    # LBC Certificate Management: controller creates the ACM cert for the rule host,
-    # writes the Route53 DNS-validation record into the ACK-managed sub-zone, waits
-    # for ISSUED, and attaches it to the HTTPS listener. Supersedes a static
-    # certificate-arn / ACK acm cert.
-    alb.ingress.kubernetes.io/create-acm-cert: "true"
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-central-1:718959508124:certificate/c04aaf00-cbb2-4186-8ceb-df434fa7e80c
     # Target-group health check: no healthcheck-path is set, so the ALB probes the
-    # traffic port (8087) at "/". Django "/" commonly 30x-redirects (login/locale) and
-    # /health 500s on dev (Stalwart unwired), so accept 2xx-3xx to keep targets Healthy.
+    # traffic port (8087) at "/". Django "/" commonly 30x-redirects (login/locale),
+    # so accept 2xx-3xx to keep targets Healthy.
     # Tighten to a known-200 liveness path at the real-domain cutover.
     alb.ingress.kubernetes.io/success-codes: "200-399"
     # Fixed-response 403 action reused by both deny rules below.
     alb.ingress.kubernetes.io/actions.deny-admin: >-
       {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden: admin is available on the internal network only."}}
-    # external-dns (AWS provider, #625) publishes the public record for this host.
-    external-dns.alpha.kubernetes.io/hostname: accounts.tb-dev.thunderbird.dev
+    # external-dns (Cloudflare provider) publishes the public record for this host.
+    external-dns.alpha.kubernetes.io/hostname: accounts.main.dev-thundermail.com
 spec:
   ingressClassName: alb
   rules:
-    - host: accounts.tb-dev.thunderbird.dev
+    - host: accounts.main.dev-thundermail.com
       http:
         paths:
-          # Deny rules FIRST so they win over the catch-all forward below.
+          # Deny rules win over the catch-all forward below because their prefixes are longer.
           - path: /admin
             pathType: Prefix
             backend:
