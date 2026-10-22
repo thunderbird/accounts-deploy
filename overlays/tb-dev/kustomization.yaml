@@ -82,9 +82,13 @@ patches:
     kind: ReplicationGroup
     name: accounts-redis
   patch: |-
-    - op: replace
-      path: /spec/securityGroupIDs/0
-      value: sg-0be1a8015ac9b2535
+    - op: remove
+      path: /spec/securityGroupIDs
+    - op: add
+      path: /spec/securityGroupRefs
+      value:
+        - from:
+            name: accounts-redis
 # ---- tb-dev DB: Neon branch (replaced the ACK RDS) ----
 # DATABASE_HOST is set statically to the Neon tb-dev branch endpoint (pooler; the app is
 # Neon-pooler-safe -- DISABLE_SERVER_SIDE_CURSORS + CONN_HEALTH_CHECKS). Reached over

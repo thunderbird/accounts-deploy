@@ -1,0 +1,15 @@
+apiVersion: vpcresources.k8s.aws/v1beta1
+kind: SecurityGroupPolicy
+metadata:
+  name: accounts
+  namespace: accounts
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: accounts
+  securityGroups:
+    groupIds:
+      - sg-0923865569772cc07
+      - sg-057d4c54f424be299
