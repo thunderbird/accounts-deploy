@@ -34,7 +34,7 @@
 #
 # NEVER `curl -L`. This is the single most important rule in this file. Django's
 # `GET /` 302s an anonymous request to `/login/`, which 302s to `/oidc/authenticate/`,
-# which 302s to https://auth.tb-dev.thunderbird.dev/realms/tbpro/... . Following that
+# which 302s to https://auth.main.dev-thundermail.com/realms/tbpro/... . Following that
 # chain makes `%{http_code}` PUBLIC KEYCLOAK's status code, measured three hops and a
 # NAT-gateway round-trip away from the pod under test -- so the gate would report a
 # cheerful 200 while green served nothing but a redirect. Verified 2026-08-10 against

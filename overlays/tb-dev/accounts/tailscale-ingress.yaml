@@ -1,8 +1,7 @@
-# Tailnet-only Ingress for the tb-dev Accounts web app. Dev is private to the
-# tailnet for validation -- no public Cloudflare tunnel yet. Public exposure
-# (accounts.tb.pro via Cloudflare tunnel) lands at the prod cutover (#147).
+# Tailnet Ingress for the tb-dev Accounts web app (admin/staff). Public customer
+# traffic uses public-ingress.yaml (accounts.main.dev-thundermail.com).
 #
-# Operator appends .<TAILNET>.ts.net -> accounts-tb-dev.tail2726a2.ts.net
+# Operator appends .<TAILNET>.ts.net -> accounts-main-dev-thundermail.tail2726a2.ts.net
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -12,7 +11,7 @@ spec:
   ingressClassName: tailscale
   tls:
     - hosts:
-        - accounts-tb-dev
+        - accounts-main-dev-thundermail
   defaultBackend:
     service:
       name: accounts
