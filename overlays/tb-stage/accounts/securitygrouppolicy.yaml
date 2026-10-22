@@ -9,5 +9,5 @@ spec:
       app.kubernetes.io/name: accounts
   securityGroups:
     groupIds:
-      - REPLACE_ME_EKS_CLUSTER_SG
+      - sg-0923865569772cc07
       - REPLACE_ME_ACCOUNTS_POD_SG
