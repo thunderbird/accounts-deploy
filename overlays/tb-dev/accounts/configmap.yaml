@@ -30,7 +30,7 @@ data:
   ALLOWED_HOSTS: "*"
   # BOTH origins: the env var REPLACES (not appends), and the tailnet admin/staff
   # POSTs still need their origin trusted alongside the public customer origin.
-  CSRF_TRUSTED_ORIGINS: "https://accounts.main.dev-thundermail.com,https://accounts-main.tail2726a2.ts.net"
+  CSRF_TRUSTED_ORIGINS: "https://accounts.main.dev-thundermail.com,https://accounts-main-dev-thundermail.tail2726a2.ts.net"
 
   # Mail client connection info shown on the dashboard (settings.CONNECTION_INFO).
   IMAP_HOST: "mail.tb-dev.thunderbird.dev"
