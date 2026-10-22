@@ -1,0 +1,92 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: accounts
+resources:
+- ../../bases
+- accounts/public-ingress.yaml
+- accounts/tailscale-ingress.yaml
+- accounts/flower-ingress.yaml
+- accounts/securitygrouppolicy.yaml
+- accounts/preview-service.yaml
+- accounts/analysistemplate-web-smoke.yaml
+images:
+- name: REPLACE_ACCOUNTS_ECR/accounts
+  newName: ghcr.io/thunderbird/thunderbird-accounts
+  digest: sha256:5a109a4fa1249a4f515af859926c4c41ea91f132030b47654ab72426f2f65c5b
+patches:
+- path: accounts/configmap.yaml
+- path: accounts/web-deployment.yaml
+- target:
+    group: external-secrets.io
+    version: v1
+    kind: ExternalSecret
+    name: accounts-secrets
+  patch: |-
+    - op: replace
+      path: /spec/dataFrom/0/extract/key
+      value: mzla/tb-stage/accounts
+- target:
+    group: external-secrets.io
+    version: v1
+    kind: ExternalSecret
+    name: accounts-db
+  patch: |-
+    - op: replace
+      path: /spec/data/0/remoteRef/key
+      value: mzla/tb-stage/accounts-db
+    - op: replace
+      path: /spec/data/1/remoteRef/key
+      value: mzla/tb-stage/accounts-db
+- target:
+    group: ec2.services.k8s.aws
+    version: v1alpha1
+    kind: SecurityGroup
+    name: accounts-redis
+  patch: |-
+    - op: replace
+      path: /spec/vpcID
+      value: vpc-0fae1c9a36a7f9637
+    - op: replace
+      path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
+      value: sg-057d4c54f424be299
+    - op: replace
+      path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+      value: "-2"
+- target:
+    group: elasticache.services.k8s.aws
+    version: v1alpha1
+    kind: CacheSubnetGroup
+    name: accounts-redis-subnets
+  patch: |-
+    - op: replace
+      path: /spec/subnetIDs
+      value:
+        - subnet-048b99aaf2118f800
+        - subnet-0152e8003b9be103b
+    - op: replace
+      path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+      value: "-2"
+- target:
+    group: elasticache.services.k8s.aws
+    version: v1alpha1
+    kind: ReplicationGroup
+    name: accounts-redis
+  patch: |-
+    - op: remove
+      path: /spec/securityGroupIDs
+    - op: add
+      path: /spec/securityGroupRefs
+      value:
+        - from:
+            name: accounts-redis
+    - op: replace
+      path: /metadata/annotations/argocd.argoproj.io~1sync-wave
+      value: "-1"
+- target:
+    version: v1
+    kind: ConfigMap
+    name: accounts-db-endpoint
+  patch: |-
+    - op: add
+      path: /data/DATABASE_HOST
+      value: ep-little-hall-a2maa1w7-pooler.eu-central-1.aws.neon.tech
