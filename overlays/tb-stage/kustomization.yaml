@@ -74,7 +74,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/securityGroupIDs/0
-      value: REPLACE_ME_ACCOUNTS_REDIS_SG
+      value: sg-009cbb8eaee3f0a3e
     - op: replace
       path: /metadata/annotations/argocd.argoproj.io~1sync-wave
       value: "-1"
