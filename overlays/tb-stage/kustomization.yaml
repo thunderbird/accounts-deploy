@@ -45,7 +45,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/vpcID
-      value: REPLACE_ME_VPC_ID
+      value: vpc-0fae1c9a36a7f9637
     - op: replace
       path: /spec/ingressRules/0/userIDGroupPairs/0/groupID
       value: REPLACE_ME_ACCOUNTS_POD_SG
@@ -58,8 +58,8 @@ patches:
     - op: replace
       path: /spec/subnetIDs
       value:
-        - REPLACE_ME_PRIVATE_SUBNET_A
-        - REPLACE_ME_PRIVATE_SUBNET_B
+        - subnet-048b99aaf2118f800
+        - subnet-0152e8003b9be103b
 - target:
     group: elasticache.services.k8s.aws
     version: v1alpha1
@@ -76,4 +76,4 @@ patches:
   patch: |-
     - op: add
       path: /data/DATABASE_HOST
-      value: REPLACE_ME_NEON_BRANCH_HOST
+      value: ep-little-hall-a2maa1w7-pooler.eu-central-1.aws.neon.tech
