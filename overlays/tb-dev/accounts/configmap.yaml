@@ -45,10 +45,10 @@ data:
 
   # Downstream Thunderbird Pro service integration (appointment on EKS, #701).
   # The tbpro dashboard "Your Services" card links out to the Appointment app.
-  TB_PRO_APPOINTMENT_URL: "https://appointment.tb-dev.thunderbird.dev"
+  TB_PRO_APPOINTMENT_URL: "https://appointment.main.dev-thundermail.com"
   # Allow the Appointment SPA origin for any cross-origin browser call into the
   # accounts API (CORS_ALLOWED_ORIGINS replaces, so list every allowed origin).
-  CORS_ALLOWED_ORIGINS: "https://appointment.tb-dev.thunderbird.dev"
+  CORS_ALLOWED_ORIGINS: "https://appointment.main.dev-thundermail.com"
 
   # Accounts Postgres — Neon tb-dev branch (cloned from accounts stage), reached over
   # Neon PrivateLink (the host resolves to the shared Neon interface endpoints via
