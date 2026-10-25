@@ -14,14 +14,14 @@ data:
   CSRF_TRUSTED_ORIGINS: "https://accounts.stage-thundermail.com,https://accounts-stage-thundermail.tail2726a2.ts.net"
   USE_ALLOW_LIST: "True"
 
-  # Mail hosts and STALWART_* are not renamed; platform-infrastructure#991 sets these.
-  IMAP_HOST: "mail.tb-stage.thunderbird.dev"
+  # STALWART_* are not renamed; platform-infrastructure#991 sets these.
+  IMAP_HOST: "mail.stage-thundermail.com"
   IMAP_PORT: "993"
   IMAP_TLS: "True"
-  JMAP_HOST: "mail.tb-stage.thunderbird.dev"
+  JMAP_HOST: "mail.stage-thundermail.com"
   JMAP_PORT: "443"
   JMAP_TLS: "True"
-  SMTP_HOST: "mail.tb-stage.thunderbird.dev"
+  SMTP_HOST: "mail.stage-thundermail.com"
   SMTP_PORT: "465"
   SMTP_TLS: "True"
 
