@@ -24,7 +24,7 @@ data:
   PUBLIC_BASE_URL: "https://accounts.main.dev-thundermail.com"
   # First entry is PRIMARY_EMAIL_DOMAIN and gets Stalwart mailboxes; the rest become aliases.
   # stage-thundermail.com stays primary because tb-dev forks the stage databases.
-  ALLOWED_EMAIL_DOMAINS: "stage-thundermail.com,mail.tb-dev.thunderbird.dev"
+  ALLOWED_EMAIL_DOMAINS: "stage-thundermail.com,main.dev-thundermail.com"
   # Dev: accept any Host so the ALB target-group health check (Host = pod IP) and
   # both ingresses pass. prod must pin this to the real host.
   ALLOWED_HOSTS: "*"
@@ -33,13 +33,13 @@ data:
   CSRF_TRUSTED_ORIGINS: "https://accounts.main.dev-thundermail.com,https://accounts-main-dev-thundermail.tail2726a2.ts.net"
 
   # Mail client connection info shown on the dashboard (settings.CONNECTION_INFO).
-  IMAP_HOST: "mail.tb-dev.thunderbird.dev"
+  IMAP_HOST: "mail.main.dev-thundermail.com"
   IMAP_PORT: "993"
   IMAP_TLS: "True"
-  JMAP_HOST: "mail.tb-dev.thunderbird.dev"
+  JMAP_HOST: "mail.main.dev-thundermail.com"
   JMAP_PORT: "443"
   JMAP_TLS: "True"
-  SMTP_HOST: "mail.tb-dev.thunderbird.dev"
+  SMTP_HOST: "mail.main.dev-thundermail.com"
   SMTP_PORT: "465"
   SMTP_TLS: "True"
 
@@ -96,7 +96,7 @@ data:
   STALWART_BASE_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
   # Route JMAP directly at STALWART_BASE_API_URL (the private in-cluster host) instead of
   # following the apiUrl the Stalwart session advertises (which is the PUBLIC mail host,
-  # mail.tb-dev.thunderbird.dev -- off the private link). With this true the client fetches the
+  # mail.main.dev-thundermail.com -- off the private link). With this true the client fetches the
   # session from `${base}/session` and issues JMAP calls at `${base}` directly. Requires the
   # merged client (thunderbird-accounts#1225, in the image since the mail/clients hotpatch was
   # removed, accounts-deploy#58). /.well-known/jmap must still resolve for discovery.
@@ -119,7 +119,7 @@ data:
   # auth fails. Not a secret -- just selects the auth scheme.
   STALWART_JMAP_API_AUTH_METHOD: "basic"
   USE_ALLOW_LIST: "True"
-  # Stalwart serves its 443 cert for the public mail host (mail.tb-dev.thunderbird.dev),
+  # Stalwart serves its 443 cert for the public mail host (mail.main.dev-thundermail.com),
   # not the in-cluster Service DNS name, so skip cert-name verification on this
   # private in-cluster link (default is true). Traffic stays TLS-encrypted and never
   # leaves the cluster/VPC.
