@@ -25,6 +25,14 @@ data:
   SMTP_PORT: "465"
   SMTP_TLS: "True"
 
+  TB_PRO_APPOINTMENT_URL: "https://appointment-stage.tb.pro/"
+  TB_PRO_SEND_URL: "https://send-stage.tb.pro/"
+  TB_PRO_SEND_API_URL: "https://send-backend-stage.tb.pro"
+  TB_PRO_SEND_API_TIMEOUT: "5"
+  TB_PRO_WAIT_LIST_URL: "https://tb.pro/waitlist/"
+  CORS_ALLOWED_ORIGINS: "https://appointment-stage.tb.pro"
+  SUPPORT_CONTACT: "dummy@example.org"
+
   DATABASE_NAME: "neondb"
   DATABASE_USER: "neondb_owner"
 
@@ -44,3 +52,18 @@ data:
   STALWART_JMAP_API_URL: "https://stalwart-https.thundermail.svc.cluster.local/jmap"
   STALWART_JMAP_API_AUTH_METHOD: "basic"
   VERIFY_PRIVATE_LINK_SSL: "false"
+
+  SPF_HOST: "spf.stage-thundermail.com"
+  HOSTED_DKIM_DOMAIN: "dkim.stage-thundermail.com"
+  HOSTED_DKIM_CLOUDFLARE_TTL: "3600"
+  STALWART_DKIM_STAGE_MANAGEMENT_ENABLED: "False"
+  CUSTOM_DOMAINS_DO_VERIFY: "True"
+  MIN_CUSTOM_DOMAIN_ALIAS_LENGTH: "3"
+
+  ZENDESK_FORM_ID: "46642378723859"
+  ZENDESK_FORM_BROWSER_FIELD_ID: "46642389601427"
+  ZENDESK_FORM_OS_FIELD_ID: "46642417675539"
+  ZENDESK_USER_PLAN_STATUS_FIELD_KEY: "thundermail_plan_status"
+
+  SENTRY_PROFILE_SAMPLE_RATE: "0.33"
+  SENTRY_TRACES_SAMPLE_RATE: "0.33"
