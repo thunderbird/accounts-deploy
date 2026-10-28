@@ -89,4 +89,4 @@ patches:
   patch: |-
     - op: add
       path: /data/DATABASE_HOST
-      value: ep-little-hall-a2maa1w7-pooler.eu-central-1.aws.neon.tech
+      value: ep-fancy-sunset-a23jdxqy-pooler.eu-central-1.aws.neon.tech
