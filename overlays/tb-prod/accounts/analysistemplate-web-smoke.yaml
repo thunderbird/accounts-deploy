@@ -1,0 +1,81 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: accounts-web-smoke
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+spec:
+  args:
+    - name: target-service
+  metrics:
+    - name: web-smoke
+      count: 1
+      failureLimit: 0
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 240
+            ttlSecondsAfterFinished: 86400
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: accounts-web-smoke
+              spec:
+                restartPolicy: Never
+                automountServiceAccountToken: false
+                nodeSelector:
+                  kubernetes.io/arch: arm64
+                  role: general
+                containers:
+                  - name: smoke
+                    image: curlimages/curl:8.11.1
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        set -eu
+                        BASE="http://{{args.target-service}}.accounts.svc.cluster.local:80"
+                        echo "smoke: target $BASE (in-cluster only; redirects are NEVER followed)"
+
+                        deadline=$(( $(date +%s) + 120 ))
+                        while : ; do
+                          resp=$(curl -sS --noproxy '*' -m 10 -w '\n%{http_code}' "$BASE/sign-up" || true)
+                          code=$(printf '%s' "$resp" | tail -n 1)
+                          if [ "$code" = "200" ]; then break; fi
+                          if [ "$(date +%s)" -ge "$deadline" ]; then
+                            echo "FAIL: $BASE/sign-up never returned 200 within 120s (last=${code:-000})"
+                            exit 1
+                          fi
+                          echo "waiting for a serving endpoint (last=${code:-000})"
+                          sleep 5
+                        done
+                        echo "GET /sign-up -> 200"
+
+                        printf '%s' "$resp" | grep -q 'window._page' \
+                          || { echo "FAIL: /sign-up returned 200 but the body has no window._page"; exit 1; }
+                        printf '%s' "$resp" | grep -q 'id="app"' \
+                          || { echo "FAIL: /sign-up returned 200 but the body has no Vue mount point"; exit 1; }
+                        echo "GET /sign-up body: window._page + #app present"
+
+                        echo "smoke: PASS"
+                    resources:
+                      requests:
+                        cpu: 50m
+                        memory: 64Mi
+                      limits:
+                        cpu: 250m
+                        memory: 128Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop:
+                          - ALL
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 100
+                  runAsGroup: 101
+                  seccompProfile:
+                    type: RuntimeDefault
