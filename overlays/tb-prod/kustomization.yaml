@@ -93,6 +93,7 @@ patches:
     - op: replace
       path: /metadata/annotations/argocd.argoproj.io~1sync-wave
       value: "-1"
+# The database host value given below is a branch of our "Accounts (Prod)" DB forked Nov. 9, 2026.
 - target:
     version: v1
     kind: ConfigMap
@@ -100,4 +101,4 @@ patches:
   patch: |-
     - op: add
       path: /data/DATABASE_HOST
-      value: REPLACE_TB_PROD_DATABASE_HOST
+      value: ep-green-hill-a20eac1h-pooler.eu-central-1.aws.neon.tech
