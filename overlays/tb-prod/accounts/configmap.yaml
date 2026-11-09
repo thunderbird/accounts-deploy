@@ -1,36 +1,71 @@
 # tb-prod environment-specific, non-secret config. Layered over the base
-# accounts-config ConfigMap. While tb-prod is in tailnet-only validation,
-# PUBLIC_BASE_URL is the tailnet host; it becomes https://accounts.tb.pro at the
-# public cutover (#147). Hosts marked REPLACE_* are finalized in #597 / #599.
+# accounts-config ConfigMap.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: accounts-config
   namespace: accounts
 data:
-  # 'mzla-tb-prod' (any non-'dev' value): the app reads APP_ENV=dev as LOCAL dev
-  # (http, no proxy) and disables SECURE_PROXY_SSL_HEADER, so Django would ignore the
-  # ingress's X-Forwarded-Proto and emit http:// OIDC redirect_uris. The secure-proxy
-  # header is gated on `not IS_DEV`, so any non-'dev' value keeps https://. Using a
-  # per-env value (not 'prod') also names the Sentry environment and the PostHog env
-  # tag (both = APP_ENV), keeping EKS-prod telemetry in a distinct stream from the
-  # legacy ECS `prod`. Verified safe: nothing branches on APP_ENV/IS_STAGE/IS_PROD.
-  # See accounts-deploy docs §12.4 and platform-infrastructure#617.
-  APP_ENV: "mzla-tb-prod"
-  PUBLIC_BASE_URL: "https://accounts-tb-prod.tail2726a2.ts.net"
+  APP_ENV: "mzla-tb-pod"
+  PADDLE_ENV: "production"
+  PUBLIC_BASE_URL: "https://accounts.tb.pro"
   ALLOWED_EMAIL_DOMAINS: "thundermail.com,tb.pro"
+  ALLOWED_HOSTS: "accounts.tb.pro"
+  CSRF_TRUSTED_ORIGINS: "https://accounts.tb.pro"
+  USE_ALLOW_LIST: "True"
 
-  # Accounts Postgres (net-new ACK RDS, #597). DATABASE_HOST/PORT come from the
-  # accounts-db-endpoint ConfigMap (ACK FieldExport), not from here.
-  DATABASE_NAME: "accounts"
-  DATABASE_USER: "accounts"
+  # STALWART_* are not renamed; platform-infrastructure#991 sets these.
+  IMAP_HOST: "mail.thundermail.com"
+  IMAP_PORT: "993"
+  IMAP_TLS: "True"
+  JMAP_HOST: "mail.thundermail.com"
+  JMAP_PORT: "443"
+  JMAP_TLS: "True"
+  SMTP_HOST: "mail.thundermail.com"
+  SMTP_PORT: "465"
+  SMTP_TLS: "True"
 
-  # OIDC endpoints against the tbpro realm (prod Keycloak, auth.tb.pro) -- #599.
+  TB_PRO_APPOINTMENT_URL: "https://appointment.tb.pro/"
+  TB_PRO_SEND_URL: "https://send.tb.pro/"
+  TB_PRO_SEND_API_URL: "https://send-backend.tb.pro"
+  TB_PRO_SEND_API_TIMEOUT: "5"
+  TB_PRO_WAIT_LIST_URL: "https://tb.pro/waitlist/"
+  CORS_ALLOWED_ORIGINS: "https://appointment.tb.pro"
+  WEBMAIL_URL: "https://webmail.thundermail.com/"
+  SUPPORT_CONTACT: "dummy@example.org"
+
+  DATABASE_NAME: "neondb"
+  DATABASE_USER: "neondb_owner"
+
   OIDC_URL_AUTH: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/auth/"
-  OIDC_URL_TOKEN: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/token/"
-  OIDC_URL_USER: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/userinfo/"
-  OIDC_URL_JWKS: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/certs/"
   OIDC_URL_LOGOUT: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/logout/"
+  OIDC_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/token/"
+  OIDC_URL_USER: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/userinfo/"
+  OIDC_URL_JWKS: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/certs/"
 
-  # Stalwart management API (reached over VPC peering) -- finalized in #597.
-  STALWART_BASE_API_URL: "REPLACE_TB_PROD_STALWART_API_URL"
+  KEYCLOAK_URL_API: "http://keycloak-customer.keycloak-customer.svc.cluster.local/admin/realms/tbpro/"
+  KEYCLOAK_ADMIN_CLIENT_ID: "tb-accounts-admin"
+  KEYCLOAK_ADMIN_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/master/protocol/openid-connect/token/"
+
+  STALWART_BASE_API_URL: "https://stalwart-https.thundermail.svc.cluster.local"
+  STALWART_JMAP_API_IGNORE_API_URL: "true"
+  STALWART_ADMIN_API_USE_JMAP: "true"
+  STALWART_JMAP_API_URL: "https://stalwart-https.thundermail.svc.cluster.local/jmap"
+  STALWART_JMAP_API_AUTH_METHOD: "basic"
+  VERIFY_PRIVATE_LINK_SSL: "false"
+
+  SPF_HOST: "spf.thundermail.com"
+  HOSTED_DKIM_DOMAIN: "dkim.thundermail.com"
+  HOSTED_DKIM_CLOUDFLARE_TTL: "3600"
+  HOSTED_DKIM_CLOUDFLARE_ZONE_ID: "4c46a88284eb0a892c8c0fc302b4a3d7"
+  STALWART_DKIM_STAGE_MANAGEMENT_ENABLED: "False"
+  CUSTOM_DOMAINS_DO_VERIFY: "True"
+  MIN_CUSTOM_DOMAIN_ALIAS_LENGTH: "3"
+
+  ZENDESK_FORM_ID: "38216134664083"
+  ZENDESK_FORM_BROWSER_FIELD_ID: "44379231787027"
+  ZENDESK_FORM_OS_FIELD_ID: "44379263732755"
+  ZENDESK_USER_PLAN_STATUS_FIELD_KEY: "tm_plan_status"
+
+  SENTRY_PROFILE_SAMPLE_RATE: "0.33"
+  SENTRY_TRACES_SAMPLE_RATE: "0.33"
