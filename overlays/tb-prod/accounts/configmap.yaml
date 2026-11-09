@@ -1,4 +1,4 @@
-# tb-stage environment-specific, non-secret config. Layered over the base
+# tb-prod environment-specific, non-secret config. Layered over the base
 # accounts-config ConfigMap.
 apiVersion: v1
 kind: ConfigMap
