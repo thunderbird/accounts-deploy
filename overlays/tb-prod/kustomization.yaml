@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: accounts
 resources:
 - ../../bases
+- accounts/public-ingress.yaml
 - accounts/tailscale-ingress.yaml
 - accounts/flower-ingress.yaml
 - accounts/securitygrouppolicy.yaml
