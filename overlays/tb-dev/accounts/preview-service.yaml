@@ -1,0 +1,100 @@
+# tb-dev: second Service for Argo Rollouts, landed AHEAD of the strategy flip.
+#
+# Deliberately inert today. With no Rollout in the namespace its selector matches the
+# same pods as `accounts`, so it is a harmless duplicate ClusterIP. It exists now so the
+# eventual strategy flip is a single change to the workload manifest instead of a
+# simultaneous Service + Rollout + ArgoCD-config edit across two repos.
+#
+# ONE Service serves BOTH strategies, which is the point:
+#   blue-green -> strategy.blueGreen.previewService: accounts-preview
+#                 (with strategy.blueGreen.activeService: accounts)
+#   canary     -> strategy.canary.canaryService: accounts-preview
+#                 (with strategy.canary.stableService: accounts)
+# So moving blue-green -> canary later is a strategy-block swap plus a trafficRouting
+# stanza, not a re-architecture.
+#
+# CANARY IS NOT WIRED, AND WOULD FAIL SILENTLY IF SWITCHED ON TODAY. The design doc's
+# stated reason ("canary rejected -- ALB, no traffic router") is out of date about the
+# CLUSTER -- argo-rollouts v1.9.0 and aws-load-balancer-controller both run here, and
+# Rollouts does support strategy.canary.trafficRouting.alb -- but accounts-public is not
+# a valid target as written:
+#   * Rollouts requires the managed rule to reference the stable/root Service with
+#     `port: {name: use-annotation}`. accounts-public's catch-all `/` rule is
+#     `service: accounts, port: {number: 80}`. (The /admin denies already use
+#     use-annotation; the forward rule does not.)
+#   * Rollouts matches that rule by SERVICE NAME ONLY, never the port, so it would write
+#     actions.accounts, log a successful patch and advance the step while the LB
+#     controller ignores an action whose rule is not use-annotation -- 100% of traffic
+#     stays on stable, with no error anywhere.
+#   * Flipping the rule to use-annotation needs a git-seeded actions.accounts value first,
+#     or LBC rejects the whole Ingress -- deny rules included.
+# An earlier revision of this comment claimed canary was "exactly Rollouts' supported
+# setup" and that target-type=ip was "a hard requirement". Both were wrong: ip mode is not
+# required (Rollouts documents weighted ALB routing for instance mode too), and the setup
+# is not supported as configured. See the Canary section of platform-infrastructure#850.
+#
+# Rollouts will inject `rollouts-pod-template-hash` into .spec.selector on BOTH this
+# Service and `accounts` once a Rollout owns them, and ArgoCD selfHeal strips it back
+# out -- that breaks routing mid-rollout AND holds the Application OutOfSync, which
+# hangs the Kargo tb-dev Stage's argocd-wait even for a healthy build.
+#
+# THAT PROTECTION IS NOW IN PLACE. platform-infrastructure#850 merged as 96cc6de on
+# 2026-08-10 and was confirmed live on the cluster the same day: tb-dev-accounts carries
+# jsonPointers [/spec/selector] for BOTH `accounts` and `accounts-preview`, two key-scoped
+# pointers for the accounts-public ALB annotations, an argoproj.io/Rollout entry for the
+# Reloader annotation, and PruneLast=true in syncOptions -- Synced/Healthy.
+#
+# Note the two-step: merging to platform-infrastructure main is NOT enough on its own.
+# This Application's manifest is owned by the `tb-dev-app-of-apps` Application, so the
+# change only reaches the cluster once THAT app syncs. Verified after a hard refresh of
+# tb-dev-app-of-apps, not merely after the merge.
+#
+# #850 uses `jsonPointers: [/spec/selector]` on each Service,
+# matching the working precedent on this cluster (argocd/{tb-dev,tb-prod}/apps/
+# appointment.yaml, which does exactly that on all four active/preview Services). An
+# earlier revision of #850 used `managedFieldsManagers: [argo-rollouts]` and was a
+# permanent no-op; that has been retracted in the PR. DO NOT REINTRODUCE IT: Argo Rollouts
+# never sets a UserAgent on its rest.Config, so the apiserver derives the field manager
+# from the binary name and records `rollouts-controller`, while ArgoCD matches
+# managedFieldsManagers by exact string equality -- `argo-rollouts` matches nothing.
+# Confirm the recorded manager against a Service a Rollout already owns before trusting
+# any field-manager-scoped form:
+#   kubectl -n appointment get svc appointment-backend \
+#     -o jsonpath='{range .metadata.managedFields[*]}{.manager}{"\n"}{end}'
+# For a Service the two forms are behaviourally identical anyway (`spec.selector` is
+# +mapType=atomic, so it is one leaf owned by one manager); the jsonPointers form is
+# preferred only because it cannot be silently defeated by a manager-name mismatch. Its
+# cost is that a git-side selector edit would also stop reconciling, which is acceptable:
+# the selector on a Rollouts-owned Service is not something git should be changing.
+#
+# REMAINING PREREQUISITES before accounts-web is flipped to a Rollout (#850 is done):
+#   * accounts-deploy main and env/tb-dev are diverged on the hotpatch, and this overlay
+#     renders from env/tb-dev -- reconcile before the flip.
+#   * The smoke Job is NOT selected by the `accounts` SecurityGroupPolicy, so its pod uses
+#     the node ENI. sg-0dba8adea7684454f must admit 8087 from the node SG or the gate
+#     fails closed at the 120s wait on every single run. Unverified.
+#   * Two app-side blockers, both unchanged: migrations run on container boot (green
+#     migrates before the analysis; abort does not roll back the schema), and tb-dev
+#     readiness is a bare TCP check, so Rollout Healthy means "the port is open".
+#
+# NOT added to bases/: prod has no Rollouts controller wired for accounts yet, and the
+# design is explicit that the conversion happens as an overlay-scoped change rather than
+# by flipping the base for every environment at once.
+apiVersion: v1
+kind: Service
+metadata:
+  name: accounts-preview
+  namespace: accounts
+  labels:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: accounts
+    app.kubernetes.io/component: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

@@ -1,10 +1,60 @@
 # Assigns a dedicated pod security group to the Accounts web + celery pods so they
-# can reach the Accounts RDS Postgres, ElastiCache Redis, and the Stalwart
+# can reach the Accounts Neon Postgres, ElastiCache Redis, and the Stalwart
 # management API. Under POD_SECURITY_GROUP_ENFORCING_MODE=strict the listed SGs
-# REPLACE the node SG, so the EKS control-plane cluster SG must also be listed:
-#   - sg-07624df6ceb8865ec : tb-dev EKS control-plane cluster SG (pod<->control-plane)
+# REPLACE the node SG, so a cluster SG must also be listed:
+#   - sg-08c51d43c4a250a81 : the EKS-MANAGED cluster SG
+#       (eks-cluster-sg-mzla-eks-tb-dev01-120464894)
 #   - sg-0dba8adea7684454f : mzla-tb-dev-accounts-pod, from the
 #       mzla-tb-dev pulumi output (thunderbird/platform-infrastructure#596)
+#
+# USE THE EKS-MANAGED CLUSTER SG, NOT THE PULUMI ONE. This previously listed
+# sg-07624df6ceb8865ec (mzla-eks-tb-dev01-cluster-eksClusterSecurityGroup), the cluster's
+# `additional` SG created by pulumi-eks. It carries no
+# `kubernetes.io/cluster/mzla-eks-tb-dev01` tag, and neither does the pod SG -- so
+# nothing on the pod ENI was tagged, and the reconcile below hot-looped: 1805 events in
+# ~7h in this namespace, still firing when this was written.
+#
+#   FailedNetworkReconcile: expected exactly one securityGroup tagged with
+#   kubernetes.io/cluster/mzla-eks-tb-dev01 for eni eni-..., got: []
+#
+# THE EMITTER IS THE AWS LOAD BALANCER CONTROLLER, NOT THE VPC RESOURCE CONTROLLER.
+# Verified from the event itself: involvedObject.kind=TargetGroupBinding
+# (elbv2.k8s.aws/v1beta1), source.component=targetGroupBinding. The object name
+# k8s-accounts-accounts-<hash> is a TargetGroupBinding, NOT a branch ENI -- an earlier
+# revision of this comment misread it as an ENI and blamed the VPC Resource Controller.
+# There is no cluster-tag requirement in the SecurityGroupPolicy contract at all. What
+# needs the tag is LBC resolving the backend security group for an ALB Ingress with
+# `target-type: ip`, so it can manage the ALB->pod ingress rules.
+#
+# That also explains the blast pattern: events appear ONLY in namespaces that have an
+# LBC-managed-backend ALB Ingress with target-type ip.
+#
+# sg-08c51d43c4a250a81 is the SG EKS creates and tags itself
+# (kubernetes.io/cluster/mzla-eks-tb-dev01=owned), which is what LBC looks for.
+# appointment-backend/appointment-frontend already use it and produce ZERO such events --
+# the working precedent this now matches.
+#
+# CONSEQUENCE, stated because it is a shared resource: LBC will manage ALB ingress rules
+# in sg-08c51d43c4a250a81, which is shared cluster-wide. This is already the status quo,
+# not a new exposure -- that SG carries an LBC-authored rule today
+# (`elbv2.k8s.aws/targetGroupBinding=shared`, port 80 from the ALB SG) put there for
+# appointment.
+#
+# Verified before the swap that nothing depends on these pods carrying the Pulumi SG:
+# a VPC-wide scan found it referenced as a source only by the node SG, for two
+# control-plane->node rules (tcp/1025+ kubelet, tcp/443 extension API servers) that have
+# nothing to do with application pods. Every actual accounts dependency keys off the POD
+# SG (sg-0dba8...): Neon PrivateLink 5432, Redis 6379, Stalwart admin 443, Keycloak OIDC
+# back-channel 8080, CoreDNS 53, stalwart-migration-proxy 8080. Baseline captured live:
+# TCP to the Neon pooler :5432 from accounts-web succeeded, and in-cluster DNS resolved.
+#
+# SAME DEFECT ELSEWHERE: keycloak-customer/keycloak-customer (2044 events), in its own
+# repo. NOT thundermail/stalwart-server -- it lists the same untagged pair but emits ZERO
+# events, because its Services pin
+# `service.beta.kubernetes.io/aws-load-balancer-security-groups`, so LBC never manages
+# their backend SG rules and never needs the tag. An earlier revision of this comment
+# listed it as affected; changing it would mean restarting every mail pod to fix a loop
+# that was never firing.
 apiVersion: vpcresources.k8s.aws/v1beta1
 kind: SecurityGroupPolicy
 metadata:
@@ -16,5 +66,5 @@ spec:
       app.kubernetes.io/name: accounts
   securityGroups:
     groupIds:
-      - sg-07624df6ceb8865ec
+      - sg-08c51d43c4a250a81
       - sg-0dba8adea7684454f
