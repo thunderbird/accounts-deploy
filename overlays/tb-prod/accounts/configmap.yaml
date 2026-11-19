@@ -39,7 +39,7 @@ data:
   TB_PRO_SEND_API_URL: "https://send-backend.tb.pro"
   TB_PRO_SEND_API_TIMEOUT: "5"
   TB_PRO_WAIT_LIST_URL: "https://tb.pro/waitlist/"
-  CORS_ALLOWED_ORIGINS: ""
+  CORS_ALLOWED_ORIGINS: "https://appointment.tb.pro"
   WEBMAIL_URL: "https://webmail.thundermail.com/"
   SUPPORT_CONTACT: "dummy@example.org"
   ADMIN_CONTACT: "dummy@example.org"
