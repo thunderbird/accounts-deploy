@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts-web
+  namespace: accounts
+spec:
+  template:
+    spec:
+      containers:
+        - name: accounts
+          readinessProbe:
+            timeoutSeconds: 5
