@@ -1,36 +1,3 @@
-# STAGED, UNREFERENCED (thunderbird.dev public endpoint, platform-infrastructure#613
-# / #614, epic #144) — intentionally NOT listed in overlays/tb-prod/kustomization.yaml
-# yet, so nothing changes at ArgoCD sync and the working tailnet-only setup + OIDC stay
-# untouched. Flipping public is a gated Wave-2 cutover.
-#
-# This is the public AWS ALB front door for the customer-facing Accounts web app on the
-# NEW tb-prod cluster (mzla-eks-tb-prod01), as an ADDITIONAL, parallel endpoint to the
-# legacy accounts.tb.pro (legacy is NOT touched / NOT migrated here).
-#
-# Edge architecture (DECISION):
-#   - ALB Ingress (ingressClassName: alb) provisioned by the AWS Load Balancer
-#     Controller (v3.4.0, SA aws-lb-controller in kube-system).
-#   - LBC Certificate Management (create-acm-cert): the controller AUTO-CREATES the
-#     ACM cert for the rule host, writes the DNS-validation record into the
-#     (ACK-managed) tb-prod.thunderbird.dev sub-zone, waits for ISSUED, and attaches
-#     it to the HTTPS:443 listener. No ACM ARN to fill in, no ACK acm cert CR, no
-#     DNS-validation glue. (Requires the controller-side feature gate
-#     EnableCertificateManagement=true; that lives in the LBC install, not here.)
-#   - external-dns (AWS provider, #625) writes the per-app A/ALIAS record for the host
-#     in the same sub-zone.
-#   - target-type ip -> ALB registers accounts web pod IPs directly (VPC-CNI). The
-#     Ingress backend points at the `accounts` ClusterIP Service (port 80), whose
-#     targetPort is the pod's `http` port (:8087).
-#
-# Admin/staff split at the edge (docs §12.2, folds in the staged #615A deny):
-#   - The Django admin (/admin*) and the staff Stalwart route (/mail/admin*) are
-#     DENIED with an ALB fixed-response 403 — served by the ALB itself, so admin
-#     paths never reach a pod from the public edge. Staff reach admin over the
-#     tailnet ingress instead. App-level is_staff/is_superuser gating stays as
-#     defense in depth. Flower stays tailnet-only (not exposed here).
-#   - Rule ORDER matters: the two deny rules MUST precede the catch-all "/" forward
-#     so the deny wins for those prefixes. The ALB controller orders listener rules
-#     by their appearance in this spec.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -44,23 +11,17 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
-    # LBC Certificate Management: controller creates the ACM cert for the rule host,
-    # writes the Route53 DNS-validation record into the ACK-managed sub-zone, waits
-    # for ISSUED, and attaches it to the HTTPS listener. Supersedes a static
-    # certificate-arn / ACK acm cert.
-    alb.ingress.kubernetes.io/create-acm-cert: "true"
-    # Fixed-response 403 action reused by both deny rules below.
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-central-1:689951664252:certificate/30e86b15-fd7d-4703-a9b6-22dc0c63a442
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/success-codes: "200-399"
     alb.ingress.kubernetes.io/actions.deny-admin: >-
       {"type":"fixed-response","fixedResponseConfig":{"contentType":"text/plain","statusCode":"403","messageBody":"Forbidden: admin is available on the internal network only."}}
-    # external-dns (AWS provider, #625) publishes the public record for this host.
-    external-dns.alpha.kubernetes.io/hostname: accounts.tb-prod.thunderbird.dev
 spec:
   ingressClassName: alb
   rules:
-    - host: accounts.tb-prod.thunderbird.dev
+    - host: accounts.tb.pro
       http:
         paths:
-          # Deny rules FIRST so they win over the catch-all forward below.
           - path: /admin
             pathType: Prefix
             backend:
@@ -75,8 +36,6 @@ spec:
                 name: deny-admin
                 port:
                   name: use-annotation
-          # Catch-all: forward customer traffic to the accounts web Service
-          # (ClusterIP :80 -> pod http :8087).
           - path: /
             pathType: Prefix
             backend:
