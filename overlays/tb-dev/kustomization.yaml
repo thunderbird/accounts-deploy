@@ -4,12 +4,20 @@ namespace: accounts
 resources:
 - ../../bases
 # Public internet-facing ALB Ingress for the customer web app
-# (accounts.tb-dev.thunderbird.dev, thunderbird.dev TEST domain). /admin +
+# (accounts.main.dev-thundermail.com). /admin +
 # /mail/admin are denied 403 at the edge; Flower + admin stay tailnet-only.
 - accounts/public-ingress.yaml
 - accounts/tailscale-ingress.yaml
 - accounts/flower-ingress.yaml
 - accounts/securitygrouppolicy.yaml
+# Argo Rollouts PREP -- both inert until accounts-web is converted to a Rollout.
+# Landed ahead of the flip so the strategy change is one manifest edit rather than a
+# simultaneous Service + AnalysisTemplate + ArgoCD-ignoreDifferences change across two
+# repos. accounts-preview doubles as the blue-green previewService and the canary
+# canaryService; accounts-web-smoke is parameterised on its target so it serves as
+# prePromotionAnalysis now and canary steps[].analysis later. See each file's header.
+- accounts/preview-service.yaml
+- accounts/analysistemplate-web-smoke.yaml
 images:
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
@@ -42,7 +50,7 @@ patches:
     - op: replace
       path: /spec/data/1/remoteRef/key
       value: mzla/tb-dev/accounts-db
-# ---- ACK data stores (Redis; the RDS Postgres was removed) ----
+# ---- ACK data stores (Redis; Postgres is now the Neon branch, #597) ----
 # VPC + pod SG (sg-0dba8adea7684454f from pulumi #596) on the SG.
 - target:
     group: ec2.services.k8s.aws
@@ -74,6 +82,26 @@ patches:
     kind: ReplicationGroup
     name: accounts-redis
   patch: |-
-    - op: replace
-      path: /spec/securityGroupIDs/0
-      value: sg-0be1a8015ac9b2535
+    - op: remove
+      path: /spec/securityGroupIDs
+    - op: add
+      path: /spec/securityGroupRefs
+      value:
+        - from:
+            name: accounts-redis
+# ---- tb-dev DB: Neon branch (replaced the ACK RDS) ----
+# DATABASE_HOST is set statically to the Neon tb-dev branch endpoint (pooler; the app is
+# Neon-pooler-safe -- DISABLE_SERVER_SIDE_CURSORS + CONN_HEALTH_CHECKS). Reached over
+# Neon PrivateLink: the host resolves to the shared Neon interface endpoints via private
+# DNS, gated by the accounts Neon endpoint SG (platform-infrastructure#797). The RDS
+# DATABASE_HOST FieldExport is gone -- removed from bases along with the RDS itself --
+# so this is the only writer of the key. Password (neondb_owner) is in
+# mzla/tb-dev/accounts-db.
+- target:
+    version: v1
+    kind: ConfigMap
+    name: accounts-db-endpoint
+  patch: |-
+    - op: add
+      path: /data/DATABASE_HOST
+      value: ep-muddy-sky-a2tslt0c-pooler.eu-central-1.aws.neon.tech

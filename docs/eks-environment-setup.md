@@ -342,14 +342,28 @@ Whole-secret `dataFrom`. **Key names only — no values.** (Same list is in
 | `OIDC_CLIENT_SECRET` | OIDC client secret (tbpro) | set |
 | `KEYCLOAK_ADMIN_CLIENT_ID` / `KEYCLOAK_ADMIN_CLIENT_SECRET` | admin API (client-credentials) | set |
 | `REDIS_URL` | Redis connection URL (broker/cache/results) | set |
-| `PADDLE_API_KEY` / `PADDLE_TOKEN` / `PADDLE_WEBHOOK_KEY` | Paddle billing | ⚠️ **EMPTY** |
-| `PADDLE_PRICE_ID_LO` / `PADDLE_PRICE_ID_MD` / `PADDLE_PRICE_ID_HI` | Paddle price IDs | ⚠️ **EMPTY** |
-| `STALWART_API_AUTH_STRING` / `STALWART_WEBHOOK_SECRET` | Stalwart mgmt + webhook | set |
-| `MAILCHIMP_API_KEY` / `MAILCHIMP_DC` / `MAILCHIMP_LIST_ID` | Mailchimp | set |
-| `ZENDESK_API_TOKEN` / `ZENDESK_SUBDOMAIN` / `ZENDESK_USER_EMAIL` | Zendesk | set |
-| `HOSTED_DKIM_CLOUDFLARE_API_TOKEN` | Cloudflare DKIM | set |
+| `PADDLE_API_KEY` / `PADDLE_TOKEN` / `PADDLE_WEBHOOK_KEY` | Paddle billing | set |
+| `PADDLE_PRICE_ID_LO` / `PADDLE_PRICE_ID_MD` / `PADDLE_PRICE_ID_HI` | Paddle price IDs | set |
+| `STALWART_API_AUTH_STRING` / `STALWART_WEBHOOK_SECRET` | Stalwart mgmt + webhook | ⚠️ partial — auth string set, `STALWART_WEBHOOK_SECRET` **EMPTY** |
+| `MAILCHIMP_API_KEY` / `MAILCHIMP_DC` / `MAILCHIMP_LIST_ID` | Mailchimp | ⚠️ **EMPTY** |
+| `ZENDESK_API_TOKEN` / `ZENDESK_SUBDOMAIN` / `ZENDESK_USER_EMAIL` | Zendesk | ⚠️ **EMPTY** — intentional, dev has no Zendesk tenant |
+| `HOSTED_DKIM_CLOUDFLARE_API_TOKEN` | Cloudflare DKIM | ⚠️ **EMPTY** |
 | `SENTRY_DSN` | Sentry | set |
-| `POSTHOG_API_KEY` | PostHog | set |
+| `POSTHOG_API_KEY` | PostHog | ⚠️ **EMPTY** |
+
+Read from `mzla/tb-dev/accounts` on 2026-08-19 (key names and value lengths only). An empty
+value is not the same as an absent key: ESO syncs it faithfully, so the env var exists and is
+the empty string. Code that interpolates one unguarded gets a malformed value rather than a
+`KeyError` — see thunderbird/thunderbird-accounts#1212, where an empty `ZENDESK_SUBDOMAIN`
+produced `https://.zendesk.com/...` and 500'd the support form.
+
+**tb-prod:** these must be populated in `mzla/tb-prod/accounts` before the real cutover. Zendesk
+additionally needs `ZENDESK_FORM_ID`, `ZENDESK_FORM_BROWSER_FIELD_ID` and
+`ZENDESK_FORM_OS_FIELD_ID`, which are **absent from the bundle entirely** rather than empty —
+the first is non-secret and belongs in the overlay ConfigMap, the other two come from Zendesk
+admin. Note the `envFrom` ordering in `bases/accounts/web-deployment.yaml`: `secretRef` is
+listed after `configMapRef`, so any key present in both resolves to the Secret's value. Adding
+a key to a ConfigMap while an empty copy exists in Secrets Manager silently keeps the empty one.
 
 ### 11.5 Secrets — `mzla/<ENV>/accounts-db` (ExternalSecret `accounts-db`)
 
@@ -402,44 +416,55 @@ under platform-infrastructure#144.
   Keycloak sees HTTPS directly → no `--proxy-headers` dependency. Terminate-TLS +
   forward HTTP → Keycloak must keep `xforwarded`.
 
-#### 12.1.a thunderbird.dev public-endpoint plan (LOCKED — supersedes the Cloudflare sketch above)
+#### 12.1.a Public endpoints: tb-dev on main.dev-thundermail.com, tb-prod on thunderbird.dev
 
-The customer-facing public endpoint for the NEW clusters is on **`thunderbird.dev`**, not
-Cloudflare. Decisions locked (platform-infrastructure#613/#614, epic #144):
+These are the customer-facing public endpoints on the new clusters. Sources:
+platform-infrastructure#613/#614 and epic #144, plus
+[platform-infrastructure#1450](https://github.com/thunderbird/platform-infrastructure/issues/1450)
+for the tb-dev hostnames.
 
 - **Zone + delegation:** `thunderbird.dev` is a Route53 zone in the **legacy** account.
   Per-env sub-zones **`tb-dev.thunderbird.dev`** / **`tb-prod.thunderbird.dev`** are
-  **delegated (NS records)** into the NEW accounts (mzla-tb-dev / mzla-tb-prod).
-- **external-dns is SAME-ACCOUNT** on each new cluster — **AWS provider (Route53), IRSA**
-  — managing only its delegated sub-zone. **Not Cloudflare.** This replaces the
-  Cloudflare-provider `external-dns` direction sketched in §12.1 above for these clusters.
-- **App hostnames:** `<app>.<env>.thunderbird.dev` —
-  `accounts.tb-dev.thunderbird.dev`, `auth.tb-dev.thunderbird.dev` (and the `tb-prod`
-  equivalents). **Public apps: accounts + auth (keycloak) only.**
-- **TLS:** the **AWS Load Balancer Controller (v3.4.0)** auto-creates and manages the ACM
-  cert per public host via its **Certificate Management** feature (`create-acm-cert`): the
-  controller creates the cert, writes the DNS-validation record into the ACK-managed
-  sub-zone, waits for ISSUED, and attaches it to the HTTPS listener. **No per-env wildcard
-  ACM cert / no ARN to fill in / no ACK acm cert CR.** (Requires controller-side feature
-  gate `EnableCertificateManagement=true` on the LBC install.)
+  **delegated (NS records)** into the new accounts (mzla-tb-dev / mzla-tb-prod). Accounts
+  and Keycloak on tb-dev do not use the tb-dev sub-zone; they live under the Cloudflare
+  zone `dev-thundermail.com`.
+- **external-dns:** each cluster runs a same-account external-dns (AWS provider, Route53,
+  IRSA) that manages only its delegated sub-zone. tb-dev also runs
+  `tb-dev-external-dns-cloudflare` (Cloudflare provider, domain filter
+  `main.dev-thundermail.com`, DNS-only records), which writes the Accounts and Keycloak
+  records. Both tb-dev instances are `upsert-only`.
+- **App hostnames:** tb-dev serves `accounts.main.dev-thundermail.com` and
+  `auth.main.dev-thundermail.com`; tb-prod uses `accounts.tb-prod.thunderbird.dev` and
+  `auth.tb-prod.thunderbird.dev`. **Public apps: accounts + auth (keycloak) only.**
+- **tb-stage:** serves `accounts.stage-thundermail.com` and `auth.stage-thundermail.com` in
+  the Cloudflare zone `stage-thundermail.com`. `tb-stage-external-dns-cloudflare` writes
+  only those two records, and the Ingress `certificate-arn` comes from the `mzla-tb-stage`
+  stack output `acm_stage-thundermail_arn`.
+- **TLS on tb-dev:** the Ingress sets `alb.ingress.kubernetes.io/certificate-arn` to the
+  Pulumi ACM wildcard `*.main.dev-thundermail.com` (`mzla-tb-dev` stack output
+  `acm_main-dev-thundermail-wildcard_arn`).
+- **TLS on tb-prod:** the **AWS Load Balancer Controller** Certificate Management feature
+  (`create-acm-cert`) creates the cert, writes the DNS-validation record into the
+  ACK-managed sub-zone, waits for ISSUED, and attaches it to the HTTPS listener. This
+  needs the controller-side feature gate `EnableCertificateManagement=true` on the LBC
+  install.
 - **Staff surfaces stay tailnet-only:** Django `/admin*`, `/mail/admin*`, and Flower are
   **NOT** exposed on the public ALB (see §12.2 / §12.3).
 - **No legacy cutover:** these are ADDITIONAL, parallel endpoints. `auth.tb.pro` /
   `accounts.tb.pro` and all legacy resources are **untouched** (no migration here).
 
-**Accounts ALB Ingress (staged-unreferenced, this PR):**
+**Accounts ALB Ingress:**
 `overlays/tb-{dev,prod}/accounts/public-ingress.yaml` is an internet-facing AWS **ALB**
 `Ingress` (`ingressClassName: alb`, `scheme: internet-facing`, `target-type: ip`,
-`listen-ports [{"HTTPS":443}]`, `ssl-redirect "443"`, `create-acm-cert "true"`) routing
-`accounts.<env>.thunderbird.dev` to the accounts web `Service` (ClusterIP `:80` ->
-pod `http` `:8087`), with `external-dns hostname accounts.<env>.thunderbird.dev` (AWS
-provider, #625). It also **denies `/admin*` and `/mail/admin*`** at the edge via an ALB
-**fixed-response 403** (rules ordered before the catch-all forward) — folding in the
-prior staged #615A deny-only file. It is **deliberately NOT referenced** in
-`overlays/<env>/kustomization.yaml`, so the working tailnet dev setup + OIDC are
-untouched. **Flipping public is gated** on: the delegated sub-zone live, the LBC cert
-management feature gate enabled, and a coordinated OIDC redirect-URI update (accounts
-OIDC config + the Keycloak `thunderbird-accounts` client).
+`listen-ports [{"HTTPS":443}]`, `ssl-redirect "443"`) routing the env's accounts host to
+the accounts web `Service` (ClusterIP `:80` -> pod `http` `:8087`), with a matching
+`external-dns.alpha.kubernetes.io/hostname`. It **denies `/admin*` and `/mail/admin*`**
+at the edge via an ALB **fixed-response 403** (rules ordered before the catch-all
+forward). tb-dev references it in `overlays/tb-dev/kustomization.yaml` with the wildcard
+`certificate-arn`. tb-prod keeps it unreferenced with `create-acm-cert`, so flipping tb-prod
+public still needs the delegated sub-zone live, the LBC cert management feature gate
+enabled, and a coordinated OIDC redirect-URI update (accounts OIDC config + the Keycloak
+`thunderbird-accounts` client).
 
 ### 12.2 Admin / staff surfaces: split to Tailscale (private)
 
@@ -453,16 +478,13 @@ OIDC config + the Keycloak `thunderbird-accounts` client).
     `KC_HOSTNAME_ADMIN` (public `/admin` denied at the edge).
   - App-level `is_staff` / `is_superuser` gating stays as defense-in-depth.
 
-- **Staging (non-disruptive — #615 part A, folded into the thunderbird.dev public edge):**
-  the public ALB edge is authored as `overlays/tb-{dev,prod}/accounts/public-ingress.yaml`
-  but is **STAGED-UNREFERENCED** — deliberately NOT in `overlays/<env>/kustomization.yaml`
-  so nothing changes at sync. It is an `ingressClassName: alb` Ingress that serves
-  `host: accounts.<env>.thunderbird.dev` and returns a fixed-response **403** for `/admin*`
-  and `/mail/admin*` (rules ordered before the catch-all `/` forward to the accounts
-  Service). TLS is handled by the LBC Certificate Management feature (`create-acm-cert`),
-  so there is no ACM ARN placeholder; accounts/Keycloak keep proxy-header handling. This
-  supersedes the earlier deny-only `public-ingress.yaml` and the staged NLB
-  `loadbalancer-service.yaml`.
+- **Public edge:** the ALB Ingress in §12.1.a serves the env's accounts host and returns
+  a fixed-response **403** for `/admin*` and `/mail/admin*` (rules ordered before the
+  catch-all `/` forward to the accounts Service). It is live on tb-dev and
+  staged-unreferenced on tb-prod. TLS is the wildcard `certificate-arn` on tb-dev and LBC
+  Certificate Management (`create-acm-cert`) on tb-prod; accounts/Keycloak keep
+  proxy-header handling. This supersedes the earlier deny-only `public-ingress.yaml` and
+  the staged NLB `loadbalancer-service.yaml`.
 - **Non-disruptive intent for the existing tailnet ingress:** the current
   `accounts-<env>` Tailscale ingress (`tailscale-ingress.yaml`) already routes the WHOLE
   service over the tailnet during validation and remains the staff path to `/admin*`. It is
