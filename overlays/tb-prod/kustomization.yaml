@@ -1,6 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: accounts
+replicas:
+- name: accounts-web
+  count: 0
+- name: accounts-celery
+  count: 0
+- name: accounts-flower
+  count: 0
 resources:
 - ../../bases
 - accounts/tailscale-ingress.yaml
