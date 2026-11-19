@@ -45,11 +45,6 @@ data:
   ADMIN_CONTACT: "dummy@example.org"
   ADMIN_WEBSITE: "https://www.thunderbird.net"
 
-  # Accounts Postgres (net-new ACK RDS, #597). DATABASE_HOST/PORT come from the
-  # accounts-db-endpoint ConfigMap (ACK FieldExport), not from here.
-  DATABASE_NAME: "accounts"
-  DATABASE_USER: "accounts"
-
   # OIDC endpoints of the tbpro realm: auth and logout on auth.tb.pro, the rest in-cluster (#599).
   OIDC_URL_AUTH: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/auth/"
   OIDC_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/token/"
