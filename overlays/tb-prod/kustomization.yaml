@@ -10,6 +10,7 @@ replicas:
   count: 0
 resources:
 - ../../bases
+- accounts/public-ingress.yaml
 - accounts/tailscale-ingress.yaml
 - accounts/flower-ingress.yaml
 - accounts/securitygrouppolicy.yaml
