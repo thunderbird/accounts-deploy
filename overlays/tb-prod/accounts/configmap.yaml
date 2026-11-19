@@ -29,6 +29,7 @@ data:
   JMAP_HOST: "mail.thundermail.com"
   JMAP_PORT: "443"
   JMAP_TLS: "True"
+  STALWART_BASE_JMAP_URL: "https://mail.thundermail.com"
   SMTP_HOST: "mail.thundermail.com"
   SMTP_PORT: "465"
   SMTP_TLS: "True"
@@ -41,6 +42,8 @@ data:
   CORS_ALLOWED_ORIGINS: ""
   WEBMAIL_URL: "https://webmail.thundermail.com/"
   SUPPORT_CONTACT: "dummy@example.org"
+  ADMIN_CONTACT: "dummy@example.org"
+  ADMIN_WEBSITE: "https://www.thunderbird.net"
 
   # Accounts Postgres (net-new ACK RDS, #597). DATABASE_HOST/PORT come from the
   # accounts-db-endpoint ConfigMap (ACK FieldExport), not from here.
@@ -53,6 +56,7 @@ data:
   OIDC_URL_USER: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/userinfo/"
   OIDC_URL_JWKS: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/tbpro/protocol/openid-connect/certs/"
   OIDC_URL_LOGOUT: "https://auth.tb.pro/realms/tbpro/protocol/openid-connect/logout/"
+  OIDC_FALLBACK_MATCH_BY_EMAIL: "True"
 
   KEYCLOAK_URL_API: "http://keycloak-customer.keycloak-customer.svc.cluster.local/admin/realms/tbpro/"
   KEYCLOAK_ADMIN_URL_TOKEN: "http://keycloak-customer.keycloak-customer.svc.cluster.local/realms/master/protocol/openid-connect/token/"
