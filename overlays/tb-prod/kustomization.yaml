@@ -14,6 +14,7 @@ resources:
 - accounts/tailscale-ingress.yaml
 - accounts/flower-ingress.yaml
 - accounts/securitygrouppolicy.yaml
+- accounts/celery-hpa.yaml
 images:
 # Multi-arch (amd64 + arm64) accounts image, published to GHCR by
 # thunderbird-accounts (publish-images.yml) -- this resolves the arm64
@@ -26,6 +27,15 @@ images:
 patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
+- path: accounts/celery-deployment.yaml
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: accounts-celery
+  patch: |-
+    - op: remove
+      path: /spec/replicas
 # ExternalSecret remoteRef key -> mzla/tb-prod/*
 - target:
     group: external-secrets.io
