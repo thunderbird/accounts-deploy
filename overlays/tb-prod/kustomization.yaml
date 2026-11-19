@@ -21,6 +21,7 @@ patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
 - path: accounts/celery-deployment.yaml
+- path: accounts/web-deployment.yaml
 - target:
     group: apps
     version: v1
