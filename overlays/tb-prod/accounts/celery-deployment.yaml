@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts-celery
+  namespace: accounts
+spec:
+  template:
+    spec:
+      containers:
+        - name: accounts-celery
+          resources:
+            requests:
+              cpu: 250m
+              memory: 2Gi
+            limits:
+              cpu: null
+              memory: 4Gi
