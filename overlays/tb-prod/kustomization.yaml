@@ -16,7 +16,7 @@ images:
 # Pinned to the thunderbird-accounts main commit sha that published the image.
 - name: REPLACE_ACCOUNTS_ECR/accounts
   newName: ghcr.io/thunderbird/thunderbird-accounts
-  digest: sha256:0c63f6c00068ec3b26385d4807a2571a81942def76e5f9394b83e3ff56c3708f
+  digest: sha256:8ab21e6b90200a60dba4fa5bc9281c25c8e6bd8bf9fc4118c0a483e8a9edd13e
 patches:
 # Env-specific, non-secret config (hosts, URLs, public base URL).
 - path: accounts/configmap.yaml
